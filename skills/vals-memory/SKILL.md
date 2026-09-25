@@ -1,0 +1,1 @@
+/home/orestes/Vals/infra/internal-apps/services/vals-memory/skills/vals-memory/SKILL.md

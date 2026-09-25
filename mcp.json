@@ -1,0 +1,105 @@
+{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp/oauth",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.context7.com/mcp/oauth",
+        "tokenUrl": "https://clerk.context7.com/oauth/token",
+        "clientId": "HbIftuvphy5UmznP",
+        "resource": "https://mcp.context7.com"
+      },
+      "oauth": {
+        "clientId": "HbIftuvphy5UmznP"
+      }
+    },
+    "sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.sentry.dev/mcp",
+        "tokenUrl": "https://mcp.sentry.dev/oauth/token",
+        "clientId": "AZCy2Bi4iIHTIdym",
+        "resource": "https://mcp.sentry.dev/mcp"
+      },
+      "oauth": {
+        "clientId": "AZCy2Bi4iIHTIdym"
+      }
+    },
+    "descope": {
+      "type": "http",
+      "instructions": false,
+      "url": "https://mcp.descope.com",
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.descope.com",
+        "tokenUrl": "https://api.descope.com/oauth2/v1/apps/agentic/P2DA3QqyF3N3BlmIqn1nr0LMFhrw/MS3AebdnI1nLELsiorZz77KmIleWt/token",
+        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzSnh3NEg1aGRxNnVhdWlvMkprbUZwS3VqMGoj",
+        "resource": "https://mcp.descope.com"
+      },
+      "oauth": {
+        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzSnh3NEg1aGRxNnVhdWlvMkprbUZwS3VqMGoj"
+      }
+    },
+    "figma": {
+      "enabled": false,
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp",
+      "auth": {
+        "type": "oauth"
+      }
+    },
+    "notion": {
+      "type": "http",
+      "instructions": false,
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "google_docs": {
+      "enabled": false,
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -e; set -a; source \"${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/mcp-oauth/google_docs/env.sh\"; set +a; export npm_config_ignore_scripts=true; exec npx -y @a-bonus/google-docs-mcp@1.10.0"
+      ]
+    },
+    "slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "oauth": {
+        "clientId": "5308313278801.11303691323744",
+        "scope": "search:read.public search:read.private search:read.mpim search:read.im search:read.files search:read.users chat:write channels:history groups:history mpim:history im:history canvases:read canvases:write users:read users:read.email reactions:write reactions:read emoji:read files:read channels:write groups:write im:write mpim:write channels:read groups:read mpim:read",
+        "redirectUri": "http://localhost:19876/callback"
+      },
+      "auth": {
+        "type": "oauth",
+        "credentialId": "mcp_oauth:profile:default:https://mcp.slack.com/mcp",
+        "tokenUrl": "https://slack.com/api/oauth.v2.user.access",
+        "clientId": "5308313278801.11303691323744",
+        "resource": "https://mcp.slack.com"
+      }
+    },
+    "excalidraw-local": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": [
+        "dlx",
+        "mcp-excalidraw-server@1.1.0"
+      ]
+    },
+    "docent": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--from",
+        "docent==0.1.84",
+        "docent-mcp"
+      ]
+    }
+  }
+}

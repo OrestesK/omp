@@ -1,0 +1,166 @@
+modelRoles:
+  slow: openai-codex/gpt-6-sol:high
+  writer: openai-codex/gpt-6-sol:medium
+  task: openai-codex/gpt-6-sol:high
+  web: openai-codex/gpt-6-luna:medium
+  smol: openai-codex/gpt-6-luna:medium
+  monitor: openai-codex/gpt-6-luna:low
+  default: anthropic/claude-opus-5-5:high
+symbolPreset: unicode
+composer:
+  shape: pi
+  tokenRate: false
+theme:
+  dark: gruvbox-pi
+setupVersion: 2
+statusLine:
+  preset: custom
+  transparent: true
+  compactThinkingLevel: false
+  showHookStatus: true
+  separator: ascii
+  contextLine: "off"
+  sessionAccent: false
+  leftSegments:
+    - model
+    - mode
+    - context_pct
+    - cache_hit
+  rightSegments:
+    - path
+    - git
+    - cost
+colorBlindMode: false
+tui:
+  hyperlinks: auto
+  reactions: false
+  titleState: false
+  titleSpinner: line
+  tight: true
+  resizeScrollback: preserve
+  textSizing: false
+hideThinkingBlock: true
+model:
+  loopGuard:
+    enabled: false
+    checkAssistantContent: false
+    toolCallReminder: false
+  toolCallLoopGuard:
+    enabled: false
+textVerbosity: low
+includeModelInPrompt: true
+personality: pragmatic
+images:
+  describeForTextModels: false
+steeringMode: all
+followUpMode: all
+interruptMode: immediate
+doubleEscapeAction: tree
+emojiAutocomplete: false
+spelling:
+  autocomplete: "off"
+completion:
+  notify: "off"
+magicKeywords:
+  orchestrate: false
+  ultrathink: false
+  enabled: false
+  workflow: false
+  jevify: false
+startup:
+  checkUpdate: true
+power:
+  sleepPrevention: "off"
+compaction:
+  methodOrder:
+    - remote
+    - handoff
+  thresholdPercent: 60
+  experimentalContextManagement: false
+  idleEnabled: true
+  asyncEnabled: true
+edit:
+  mode: hashline
+lsp:
+  diagnosticsOnWrite: false
+python:
+  kernelMode: session
+todo:
+  enabled: false
+  reminders: false
+  eager: default
+astGrep:
+  enabled: true
+find:
+  enabled: "off"
+debug:
+  enabled: false
+github:
+  enabled: true
+tools:
+  xdevDocs: builtins
+dev:
+  autoqa: false
+goal:
+  enabled: true
+task:
+  eager: always
+  enableEffort: false
+  enableLsp: true
+  disabledAgents:
+    - security-reviewer
+  softRequestBudget: 0
+  softRequestBudgetNotice: false
+  agentIdleTtlMs: 420000
+  agentServiceTierOverrides:
+    run-monitor: none
+shellMinimizer:
+  sourceOutlineLevel: default
+display:
+  shimmer: disabled
+  pinnedAgents: full
+  showTokenUsage: false
+eval:
+  autoBackground:
+    enabled: true
+recap:
+  enabled: false
+providers:
+  openai-codex:
+    codeMode: "on"
+  fetch: native
+  cacheRetention: long
+  openaiLiveSteering: false
+contextPromotion:
+  enabled: false
+ttsr:
+  builtinRules: true
+  enabled: true
+  contextMode: discard
+extensions:
+  - ~/Sources/pisesh
+  - ~/.config/omp/agent/extensions/UI/compact-eval.ts
+  - ~/.config/omp/agent/extensions/UI/sixel-submit-preview.ts
+disabledExtensions:
+  []
+retry:
+  modelFallback: false
+  fallbackChains:
+    web:
+      - web/hosted
+memory:
+  backend: mnemopi
+mnemopi:
+  bank: default
+  scoping: global
+  autoRecall: true
+  autoRetain: true
+  polyphonicRecall: true
+  llmMode: smol
+  noEmbeddings: false
+  embeddingModel: BAAI/bge-small-en-v1.5
+snapcompact:
+  toolResults: true
+disabledProviders:
+  - amazon-bedrock
+treeFilterMode: no-tools

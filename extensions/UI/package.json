@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "omp": {
+    "extensions": [
+      "./compact-eval.ts",
+      "./response-phase.ts",
+      "./user-message-frame.ts"
+    ]
+  }
+}

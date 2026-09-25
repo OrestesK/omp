@@ -1,0 +1,25 @@
+# Allowlist: ignore everything at the top level, then re-include the config
+# someone reading this setup needs. Runtime state (databases, sessions, caches,
+# memories, blobs, reports) stays out by default.
+/*
+
+!/.gitignore
+!/README.md
+!/LICENSE
+!/AGENTS.md
+!/PERSONALITY.md
+!/config.yml
+!/mcp.json
+!/models.yml
+
+!/agents/
+!/extensions/
+!/prompts/
+!/rules/
+!/skills/
+!/themes/
+!/assets/
+
+# Build and tool output inside allowed directories
+node_modules/
+__pycache__/
