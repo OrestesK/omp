@@ -22,6 +22,7 @@ Personal configuration for [Oh My Pi](https://github.com/can1357/oh-my-pi) (`omp
 | | `skills/` | Task-specific procedures, loaded when a task matches |
 | | `prompts/` | Slash prompts |
 | | `extensions/` | TUI tweaks and an observational-memory extension |
+| | `packages/pisesh/` | Included, pinned `OrestesK/pisesh` Git submodule providing `/sesh` |
 | Settings | `config.yml` | Models, UI, tools, memory, and extension settings |
 | | `mcp.json` | MCP servers |
 | | `models.yml` | Provider setup (API key read from the environment) |
@@ -110,16 +111,19 @@ The extension is ported from `pi-observational-memory` (MIT, see its [LICENSE](e
 2. **Clone** into the agent directory this setup uses:
 
     ```sh
-    git clone https://github.com/OrestesK/omp.git ~/.config/omp/agent
+    git clone --recurse-submodules https://github.com/OrestesK/omp.git ~/.config/omp/agent
+    export PI_CONFIG_DIR=.config/omp
     PI_CODING_AGENT_DIR="$HOME/.config/omp/agent" omp
     ```
 
-    OMP's default agent directory is `~/.omp/agent`; `PI_CODING_AGENT_DIR` points it here.
+    `PI_CONFIG_DIR=.config/omp` selects `~/.config/omp` as OMP's config root. Add that export to your shell profile for later sessions. `PI_CODING_AGENT_DIR` explicitly selects this repo's agent directory.
+
+    For an existing clone, run `git submodule update --init --recursive` from `~/.config/omp/agent`. The config repository's commit pins the included `OrestesK/pisesh` fork at `packages/pisesh/`.
+
 3. **Authorize MCP servers** when each one prompts on first use
 
 Notes:
-
-- Extension paths in `config.yml` use `~/`. `~/Sources/pisesh` is a local extension not in this repo
+- `/sesh` loads from the included checkout without npm. To install the standalone `pisesh` CLI optionally, run `cd ~/.config/omp/agent/packages/pisesh && npm link`
 - Private MCP servers go in an untracked `.mcp.json` next to `mcp.json`; OMP reads both
 
 ## License

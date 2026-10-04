@@ -4,6 +4,7 @@
 /*
 
 !/.gitignore
+!/.gitmodules
 !/README.md
 !/LICENSE
 !/AGENTS.md
@@ -13,6 +14,7 @@
 !/models.yml
 
 !/agents/
+!/packages/
 !/extensions/
 !/prompts/
 !/rules/

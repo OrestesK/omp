@@ -138,7 +138,7 @@ ttsr:
   enabled: true
   contextMode: discard
 extensions:
-  - ~/Sources/pisesh
+  - ~/.config/omp/agent/packages/pisesh
   - ~/.config/omp/agent/extensions/UI/compact-eval.ts
   - ~/.config/omp/agent/extensions/UI/sixel-submit-preview.ts
 disabledExtensions:
