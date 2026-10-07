@@ -72,7 +72,7 @@ You MUST NOT:
 ### Waiting
 
 You MUST NOT:
-- poll or sleep while work runs. Results are delivered to you
+- poll or sleep while work runs, including jobs and subagents. Results are delivered to you
 
 You MUST:
 - spawn the agents and `await wait(handles)` within the same `eval` call when the current step requires results from a fixed group of independent agents
