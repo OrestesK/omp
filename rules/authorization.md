@@ -36,6 +36,7 @@ A protected action:
 
 Not a protected action:
   - actions on temporary artifacts created solely by the current task
+  - a previously authorized action
 
 When requesting approval for a protected action, state:
   - exact tool
