@@ -52,9 +52,11 @@ A material omission or abstraction requires approval. If the user explicitly req
 - At most 11 primary semantic edges
 - At most 3 callouts
 - At most 5 accent color families
-- One dominant route
+- One dominant reading order
+    - For a flow, one dominant route
 - At most one feedback loop on the primary canvas
-- One clear endpoint
+- One clear takeaway
+    - For a flow, one unambiguous endpoint
 
 If the required story exceeds a limit, split it into overview + detail rather than violating the budget. A user may approve an exception after seeing the tradeoff
 
@@ -62,7 +64,7 @@ If the required story exceeds a limit, split it into overview + detail rather th
 
 No total element cap. The static audit always emits `technical-visual-review-required`. Technical mode can never earn autonomous `PASS` because JSON cannot prove panel structure or local reading order. Require:
 - coherent panels/lanes
-- one local flow per panel
+- one local reading order per panel, with flow direction where applicable
 - a narrow repeated visual grammar
 - local connectors and few cross-panel edges
 - readable text at target scale
@@ -74,7 +76,7 @@ Do not create a complex scene in one batch
 1. Draw only title, boundaries, and primary nodes
 2. Screenshot and verify hierarchy/whitespace
 3. Add the primary semantic arrows
-4. Screenshot and trace the main flow without reading supporting text
+4. Screenshot and identify the main comparison, central relationship, or flow without reading supporting text
 5. Add optional branches and callouts one bounded cluster at a time
 6. Screenshot after each cluster
 7. Stop adding elements when the one-sentence takeaway is already complete
@@ -122,8 +124,9 @@ magick diagram.png -colorspace Gray /tmp/diagram-gray.png
 ```
 
 Pass conditions:
-- one primary route is visible in under three seconds
-- the endpoint is unambiguous
+- the main comparison, central relationship, or primary route is visible in under three seconds
+- the takeaway is unambiguous
+    - for flows, endpoints are unambiguous
 - essential text remains readable at target placement
 - secondary paths remain visibly secondary
 - critical distinctions survive grayscale

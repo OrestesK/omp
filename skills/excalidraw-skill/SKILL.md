@@ -1,19 +1,25 @@
 ---
 name: excalidraw-skill
-description: Use for creating, refining, validating, or exporting Excalidraw technical diagrams
+description: Use for planning, creating, refining, validating, or exporting Excalidraw technical diagrams, including text-only layout proposals before drawing
 ---
 
 # Excalidraw Skill
 
+## Plan the explanation
+
+- For a before/after diagram or an explanation of what changes, read [`references/change-explanations.md`](references/change-explanations.md) before choosing the layout
+- For a text-only layout request, apply the design guidance and return the proposed composition without opening or changing a canvas
+    - Rendered-image gates apply when drawing is requested. Do not claim visual validation from a text plan
+
 ## Design and validation for new diagrams
 
-For every nontrivial new diagram, complete these design and validation steps before you call the result complete:
+For every nontrivial new rendered diagram, complete these design and validation steps before you call the result complete:
 1. Read [`references/orestes-clean-style.md`](references/orestes-clean-style.md). It is the default style
 2. Read [`references/quality-gates.md`](references/quality-gates.md)
 3. If the user supplies visual references or native `.excalidraw` files, inspect them before layout. Reference-established traits override every generic default
 4. Decide who will read the diagram, its one-sentence takeaway, output size, overview or detail level, required claims, and non-goals
 5. Make a semantic cut: choose the facts the diagram needs to show. Do not force every source fact onto one canvas. Ask for approval before omitting or materially abstracting facts
-6. Use the overview budget by default: at most 9 primary nodes, 11 primary edges, 3 callouts, 5 accent families, one feedback loop, and one obvious endpoint. Split into panels or another diagram when exceeded
+6. Use the overview budget and view-specific checks in `references/quality-gates.md`. Split into panels or another diagram when exceeded
 7. Construct and screenshot in stages: skeleton → primary arrows → optional clusters
 8. Run the native scene audit and inspect the final export at native, 50%, 35%, and grayscale sizes
 9. For nontrivial work, run a broad blind adversarial review
@@ -135,8 +141,8 @@ Arrow labels are placed at the midpoint of the arrow. On short arrows, they over
 ## Check each staged batch
 
 After every staged `add`, `apply`, or `batch_create_elements`, take a screenshot and check:
-1. **Primary story** — Can the intended route and endpoint be identified in under three seconds without reading supporting notes?
-2. **Hierarchy** — Is one route dominant and every optional/automatic/rare route visibly subordinate?
+1. **Primary story** — Can the main comparison, central relationship, or primary route be identified in under three seconds without reading supporting notes? For a flow, is its endpoint clear?
+2. **Hierarchy** — Is the main takeaway dominant, with supporting concerns visibly subordinate?
 3. **Text truncation** — Is all label text fully visible? Increase the shape or reduce copy
    never solve this by shrinking below the style floor
 4. **Overlap** — Do any semantic shapes share space? Do boundaries contain children with real padding?
@@ -166,7 +172,7 @@ If any issue appears: **stop, fix it, re-screenshot, then continue.** The comple
 ### Steps (CLI shown: MCP tools are 1:1 — see cheatsheet)
 
 1. Complete the design steps above. `references/quality-gates.md` gives the required detail
-2. Plan the coordinate grid, panels, primary route, and endpoint before writing JSON
+2. Plan the coordinate grid, panels, and main comparison, central relationship, or route before writing JSON. Identify endpoints for flows
 3. Only after the user approves discarding the current scene, or after a named snapshot under an approved replacement workflow, run `npx -y mcp-excalidraw-server clear --yes`
 4. Create only title/boundaries and primary nodes first. Use descriptive IDs. Screenshot and correct hierarchy/whitespace before arrows:
    ```bash
@@ -182,7 +188,7 @@ If any issue appears: **stop, fix it, re-screenshot, then continue.** The comple
    (The `-` positional is optional — with no file argument, `add` reads stdin)
 5. Set shape widths using `max(160, labelLength * 12)` and use the 20px body-text default
 6. Add the primary semantic arrows in a second batch. Bind each arrow with `startElementId` and `endElementId`
-   screenshot and trace the main flow
+   screenshot and trace the main relationships
 7. Add optional branches and callouts one bounded cluster at a time. Screenshot after each cluster and stop when the one-sentence takeaway is complete
 8. Export the native scene. Resolve the skill directory from the loaded `SKILL.md`, then run:
    ```bash
@@ -301,6 +307,7 @@ This is how diagrams live in a repo: commit the `.excalidraw` file, and re-`impo
 
 ## References
 
+- [`references/change-explanations.md`](references/change-explanations.md): before/after composition, core and supporting concerns, local rationale, and text-only planning
 - [`references/orestes-clean-style.md`](references/orestes-clean-style.md): default visual grammar and reference-matching rules
 - [`references/quality-gates.md`](references/quality-gates.md): intake, semantic reduction, complexity budgets, staged construction, target-scale/grayscale, and adversarial review gates
 - [`references/cheatsheet.md`](references/cheatsheet.md): full CLI reference, MCP tools, REST API endpoints, payload shapes, and fallback colors/sizing
