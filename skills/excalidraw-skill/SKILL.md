@@ -28,16 +28,23 @@ The diagram must have complete labels, the allowed arrow count, no clipping at f
 
 ## Step 0: Pick an Interface
 
-Three interfaces drive the same live canvas. Pick the first one that applies:
-1. **MCP tools** — if `excalidraw/*` tools (e.g. `batch_create_elements`) are in your tool list, prefer them: results land directly in your context, and screenshots come back as images without touching disk
-2. **CLI** (default when no MCP tools are present):
-   ```bash
-   npx -y mcp-excalidraw-server <command>
-   ```
-   No setup needed — any canvas-touching command **auto-starts the canvas server** on `http://127.0.0.1:3000` (first `npx` run downloads the package). If the CLI is installed globally (`npm i -g mcp-excalidraw-server`), the shorter alias `excalidraw-canvas <command>` works too
-3. **REST API** (last resort, e.g. from application code): HTTP endpoints on `http://127.0.0.1:3000` — see `references/cheatsheet.md` for payloads. The server must already be running
+The MCP tools and CLI use the same live canvas at `http://127.0.0.1:23187`. For every CLI invocation, use this prefix followed by a subcommand:
+```bash
+EXPRESS_SERVER_URL=http://127.0.0.1:23187 EXCALIDRAW_NO_AUTOSTART=1 pnpm dlx mcp-excalidraw-server@1.1.0 <command>
+```
+Bare commands below (such as `start`, `add`, and `export`) are subcommands to append to this prefix. Run `start` explicitly before canvas work; it starts a detached server or reports an existing one, and overrides the no-autostart setting. With that setting, canvas-touching commands cannot start a missing server.
 
-The canvas URL comes from `EXPRESS_SERVER_URL` (default `http://127.0.0.1:3000`). Remind the user to open that URL in a browser — screenshots, image export, mermaid conversion, and viewport control need an open tab (CLI exits with code 4 when it's missing)
+Pick the first applicable interface for scene work:
+1. **MCP tools** — if `excalidraw/*` tools (e.g. `batch_create_elements`) are in your tool list, prefer them: results land directly in your context, and screenshots come back as images without touching disk
+2. **CLI** (default when no MCP tools are present) — use the prefix above with the subcommands in the quick reference
+3. **REST API** (last resort, e.g. from application code): HTTP endpoints on `http://127.0.0.1:23187` — see `references/cheatsheet.md` for payloads. The server must already be running
+
+Remind the user to open `http://127.0.0.1:23187` in a browser — screenshots, image export, mermaid conversion, and viewport control need an open tab (CLI exits with code 4 when it's missing)
+
+- When this task's `start` returns `spawned: true`, record its PID
+- Snapshots exist only while the server runs. Before editing or replacing a scene that must remain recoverable after shutdown, export that scene to a native `.excalidraw` file
+- When canvas work is complete, export the final scene with `export --out <scene.excalidraw>`
+- Run `stop` only when `status` still reports the PID this task started and no other task or user is using the server. Otherwise leave it running
 
 ### CLI Quick Reference
 
@@ -173,19 +180,17 @@ If any issue appears: **stop, fix it, re-screenshot, then continue.** The comple
 
 1. Complete the design steps above. `references/quality-gates.md` gives the required detail
 2. Plan the coordinate grid, panels, and main comparison, central relationship, or route before writing JSON. Identify endpoints for flows
-3. Only after the user approves discarding the current scene, or after a named snapshot under an approved replacement workflow, run `npx -y mcp-excalidraw-server clear --yes`
-4. Create only title/boundaries and primary nodes first. Use descriptive IDs. Screenshot and correct hierarchy/whitespace before arrows:
-   ```bash
-   npx -y mcp-excalidraw-server add - <<'EOF'
+3. Only after the user approves discarding the current scene, or after a named snapshot under an approved replacement workflow, run `clear --yes`
+4. Create only title/boundaries and primary nodes first. Use descriptive IDs. Pass this array to `add` on stdin, then screenshot and correct hierarchy/whitespace before arrows:
+   ```json
    [
      {"id": "lb", "type": "rectangle", "x": 300, "y": 50, "width": 180, "height": 60, "text": "Load Balancer"},
      {"id": "svc-a", "type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 60, "text": "Web Server 1"},
      {"id": "svc-b", "type": "rectangle", "x": 450, "y": 200, "width": 160, "height": 60, "text": "Web Server 2"},
      {"id": "db", "type": "rectangle", "x": 275, "y": 350, "width": 210, "height": 60, "text": "PostgreSQL"}
    ]
-   EOF
    ```
-   (The `-` positional is optional — with no file argument, `add` reads stdin)
+   (`add` reads stdin when no file argument is supplied)
 5. Set shape widths using `max(160, labelLength * 12)` and use the 20px body-text default
 6. Add the primary semantic arrows in a second batch. Bind each arrow with `startElementId` and `endElementId`
    screenshot and trace the main relationships
@@ -264,10 +269,11 @@ add elements
 
 ## Workflow: Mermaid Conversion
 
-```bash
-echo 'graph TD
+Pass this diagram to `mermaid` on stdin:
+```mermaid
+graph TD
   A[Client] --> B[API]
-  B --> C[(DB)]' | npx -y mcp-excalidraw-server mermaid
+  B --> C[(DB)]
 ```
 Requires an open browser tab (conversion runs in the frontend
 exit code 4 tells you to open the canvas URL). Afterwards `screenshot` to verify layout. If the auto-layout is poor (nodes crowded, edges crossing), find problem elements with `describe` and reposition them with `update`
@@ -293,8 +299,8 @@ This is how diagrams live in a repo: commit the `.excalidraw` file, and re-`impo
 
 ## Error Recovery
 
-- **Exit code 3 (canvas unreachable)?** Auto-start is disabled (`EXCALIDRAW_NO_AUTOSTART=1`) or a non-loopback `EXPRESS_SERVER_URL` is set. Run `start` explicitly or fix the env
-- **Exit code 4 (browser required)?** Open `http://127.0.0.1:3000` in a browser, then retry — screenshots, image export, viewport, and mermaid conversion render in the frontend
+- **Exit code 3 (canvas unreachable)?** Run `start` explicitly with the CLI prefix above
+- **Exit code 4 (browser required)?** Open `http://127.0.0.1:23187` in a browser, then retry — screenshots, image export, viewport, and mermaid conversion render in the frontend
 - **Elements not appearing?** Check `describe` — they may be off-screen. In MCP mode, `set_viewport` with `scrollToContent: true`
   in a browser, press the zoom-to-fit button
 - **Arrow not connecting?** Verify element IDs with `get <id>`. Make sure `startElementId`/`endElementId` match existing element IDs

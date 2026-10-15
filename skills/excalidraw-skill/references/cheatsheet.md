@@ -2,13 +2,13 @@
 
 ## Defaults
 
-- Canvas base URL: `EXPRESS_SERVER_URL` (default `http://127.0.0.1:3000`). CLI also accepts `--url <canvasUrl>`
-- Canvas health: `GET /health` or `npx -y mcp-excalidraw-server status`
-- Auto-start: any canvas-touching CLI command starts the server if it's down (opt out with `EXCALIDRAW_NO_AUTOSTART=1`)
+- Canvas base URL in this setup: `http://127.0.0.1:23187`, supplied by `EXPRESS_SERVER_URL` in the CLI prefix from `SKILL.md`. The package defaults to `http://127.0.0.1:3000` without that setting
+- Canvas health: `GET /health` or `status`
+- Auto-start is disabled in this setup. Run `start` explicitly before canvas work
 
 ## CLI Reference
 
-`npx -y mcp-excalidraw-server <command>` (or `excalidraw-canvas <command>` after `npm i -g`).
+Append the bare subcommands below to the pinned, per-invocation CLI prefix in `SKILL.md` Step 0.
 JSON results on stdout — except `describe` (plain text) and raw-content output when `--out` is omitted (`export` scene JSON, `screenshot --format svg`). Diagnostics on stderr. Exit codes: 0 ok, 1 error, 2 usage, 3 canvas unreachable, 4 browser tab required. Explicit `start` overrides `EXCALIDRAW_NO_AUTOSTART=1`
 
 ### Server
@@ -16,7 +16,7 @@ JSON results on stdout — except `describe` (plain text) and raw-content output
 | Command | Description |
 |---------|-------------|
 | `start` | Start the canvas server (detached); prints URL + pid |
-| `stop` | Stop the canvas server (identity-checked via `/health` — never signals foreign services) |
+| `stop` | Stop the identity-checked canvas server at the configured URL (not task-ownership-aware; follow the stop rule in `SKILL.md`) |
 | `status` | Health, element count, connected browser tabs |
 
 ### Elements

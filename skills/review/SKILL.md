@@ -18,7 +18,7 @@ You MUST NOT:
 ## Reviewers
 
 You MUST:
-- spawn one `reviewer` for each core angle, every time: Alignment, Correctness, Coding rules, and Design
+- spawn one `reviewer` for each core angle, when you think the angle may be useful in any kind, every time: Alignment, Correctness, Coding rules, and Design
 - add a specialist for every risk the change touches, such as security, data and migrations, concurrency, performance, operations and deploys, or tests and proof
     - when unsure whether one applies, add it
     - give each specialist its own fresh reviewer and one surface

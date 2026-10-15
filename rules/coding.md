@@ -33,6 +33,8 @@ You MUST NOT:
 You MUST:
   - trace real producers, data shapes, runtime paths, and trust owned types and invariants
   - update comments to reflect changed behavior, remove comments made obsolete by your change, and keep other comments unless the user approves removal
+  - when adapting an existing implementation, compare reusing it with rewriting it. Consider the code we would maintain and the integration cost
+  - review comments and documentation in the changed work for necessity, concision, and consistency with surrounding style
 
 ## Requirement trace
 

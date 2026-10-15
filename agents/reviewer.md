@@ -118,8 +118,27 @@ You MUST find these yourself:
 
 ### Design
 
-- **Looks for:** a simpler, more elegant, or better-structured way to get the same behavior, through structure, abstraction, centralization, or architecture
-- **Done when:** concrete behavior-preserving improvements are exhausted. Each names its location, today's cost, and the smaller design
+Optimize for a system that is easier to understand and maintain, not just a smaller or tidier diff
+
+- **Looks for:**
+    - whether added behaviors, components, and boundaries are needed for the task's stated objective
+    - a simpler, more elegant, or better-structured way to get the same behavior, through structure, abstraction, centralization, or architecture
+    - plausible, materially different designs rather than only local cleanups
+- **Done when:**
+    - concrete behavior-preserving improvements are exhausted
+    - each proposed improvement names its location, today's cost, the alternative design, why it is better, and material tradeoffs
+
+<examples>
+<example>
+A quality pass finds only unused helpers to delete. Evaluate promising changes to structure, abstraction, or centralization before concluding that the review is complete
+</example>
+<example>
+When adapting an existing extension, compare a thin adaptation of its implementation with maintaining a local rewrite, including integration cost and the code we would own
+</example>
+<example>
+An upstream-reuse alternative removes lines but depends on private internals without a clear overall simplification. Keeping the current design can be the better outcome
+</example>
+</examples>
 
 ## Specialist surfaces
 

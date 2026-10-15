@@ -21,7 +21,7 @@
     },
     {
       "id": 3,
-      "prompt": "Without MCP tools, use only `npx -y mcp-excalidraw-server` to build Frontend → API → Postgres, query the three rectangles, save snapshot `v1`, export `/tmp/three-tier.excalidraw`, run the local scene audit in overview mode, and report server/browser status.",
+      "prompt": "Without MCP tools, use only the pinned CLI invocation in SKILL.md Step 0. Explicitly start the canvas, build Frontend → API → Postgres, query the three rectangles, save snapshot `v1`, export `/tmp/three-tier.excalidraw`, run the local scene audit in overview mode, and report server/browser status. Stop only if this task started the server and no other task or user is using it.",
       "expected_output": "CLI-only workflow completes; both arrows are endpoint-bound; snapshot/export/status evidence exists; the audit passes without errors.",
       "files": []
     },

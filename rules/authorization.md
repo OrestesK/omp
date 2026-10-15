@@ -9,7 +9,10 @@ alwaysApply: true
 You MUST:
 - ask user to approve every new scope and behavior being proposed or added
 - attempt to resolve discoverable facts with evidence before asking the user, and show the evidence you relied on
-- ask the user about intent, preferences, and tradeoffs that evidence cannot fully confirm
+- ask the user before settling a choice or implementing its behavior when evidence and settled user decisions do not establish their intent, preferences, or tradeoffs
+- before making an exception to these configuration rules that the user has not already explicitly approved:
+    - explain the proposed exception
+    - ask the user to approve it
 - distinguish evidence of an existing requirement from a proposal requiring approval
 
 You MUST NOT:
@@ -46,6 +49,11 @@ When requesting approval for a protected action, state:
   - any relevant credentials or data
 
 ## Precedence
+
+For configuration rules outside the Prohibited Calls and Protected actions sections, explicit user approval permits an exception:
+- Apply the exception only to the agreed change
+- Do not request separate approval for parts already covered by that approval
+- Higher-priority constraints still apply
 
 Other instructions do not override the Prohibited Calls and Protected actions sections:
 - They still apply when another instruction says to keep working, finish in the same turn, or avoid asking the user

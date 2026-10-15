@@ -17,13 +17,15 @@ Personal configuration for [Oh My Pi](https://github.com/can1357/oh-my-pi) (`omp
 | --- | --- | --- |
 | Instructions | `AGENTS.md` | Discussion, escalation, progress, delegation, and review rules |
 | | `PERSONALITY.md` | Engineering values and communication style |
-| | `rules/` | Always-on rules: authorization, coding, and subagent behavior |
+| | `rules/` | Always-on rules: authorization, coding, subagent behavior, and workspace storage |
 | Capabilities | `agents/` | Custom subagents |
 | | `skills/` | Task-specific procedures, loaded when a task matches |
 | | `prompts/` | Slash prompts |
 | | `extensions/` | TUI tweaks and an observational-memory extension |
 | | `packages/pisesh/` | Included, pinned `OrestesK/pisesh` Git submodule providing `/sesh` |
+| | `packages/omp-local/` | Staged updater, launcher, and maintained host source patches |
 | Settings | `config.yml` | Models, UI, tools, memory, and extension settings |
+| | `.env` | Native environment defaults; `TMPDIR=/var/tmp` for disk-backed temporary files |
 | | `mcp.json` | MCP servers |
 | | `models.yml` | Provider setup (API key read from the environment) |
 | | `themes/` | Terminal theme |
@@ -105,22 +107,48 @@ Personal configuration for [Oh My Pi](https://github.com/can1357/oh-my-pi) (`omp
 
 The extension is ported from `pi-observational-memory` (MIT, see its [LICENSE](extensions/observational-memory/LICENSE)).
 
+## Local host patches
+
+`packages/omp-local/` maintains two source patches: observational-memory host support and lightweight, isolated JavaScript eval workers. Builds use a complete upstream release checkout and matching published native binaries.
+
+With the local launcher installed, `omp update` stages the latest stable release, applies both patches without fuzz, builds, runs the affected host tests and isolated memory/packaged-CLI smoke checks, and switches `~/.local/share/omp-local/current` only after success. Running sessions and previous release directories are left intact.
+
+```sh
+omp update --check
+omp update --version 18.8.7
+omp update --force
+```
+
+A conflict or failed check leaves the active release unchanged and prints the retained staging directory. Ask an agent to update the patch files in `packages/omp-local/patches/`, then rerun the pinned update. Do not repair only the generated bundle or staged checkout: the source patches are the maintained copy.
+
+The updater prints the previous release path. To roll back future launches, point `~/.local/share/omp-local/current` at that retained release. `omp update --plugins` still updates plugins; canary/channel-switch options are not supported by this stable-release updater. A direct global reinstall bypasses these patches and can replace the launcher.
+
 ## Using it
 
-1. **Install** the patched OMP host with `registerCompactionSnapshot` support and configure credentials for the provider you use
+1. **Install prerequisites:** Bun, GNU `patch`, and `tar`; configure credentials for the provider you use
 2. **Clone** into the agent directory this setup uses:
 
     ```sh
     git clone --recurse-submodules https://github.com/OrestesK/omp.git ~/.config/omp/agent
     export PI_CONFIG_DIR=.config/omp
-    PI_CODING_AGENT_DIR="$HOME/.config/omp/agent" omp
     ```
 
-    `PI_CONFIG_DIR=.config/omp` selects `~/.config/omp` as OMP's config root. Add that export to your shell profile for later sessions. `PI_CODING_AGENT_DIR` explicitly selects this repo's agent directory.
+    `PI_CONFIG_DIR=.config/omp` selects `~/.config/omp` as OMP's config root. Add that export to your shell profile for later sessions.
 
     For an existing clone, run `git submodule update --init --recursive` from `~/.config/omp/agent`. The config repository's commit pins the included `OrestesK/pisesh` fork at `packages/pisesh/`.
 
-3. **Authorize MCP servers** when each one prompts on first use
+3. **Build and select the patched host:**
+
+    ```sh
+    bun ~/.config/omp/agent/packages/omp-local/update.ts --version 18.8.7
+    chmod +x ~/.config/omp/agent/packages/omp-local/omp
+    ln -sfn "$HOME/.config/omp/agent/packages/omp-local/omp" "$HOME/.bun/bin/omp"
+    PI_CODING_AGENT_DIR="$HOME/.config/omp/agent" omp
+    ```
+
+    This replaces Bun's `omp` launcher, not its installed package. `PI_CODING_AGENT_DIR` explicitly selects this repo's agent directory.
+
+4. **Authorize MCP servers** when each one prompts on first use
 
 Notes:
 - `/sesh` loads from the included checkout without npm. To install the standalone `pisesh` CLI optionally, run `cd ~/.config/omp/agent/packages/pisesh && npm link`

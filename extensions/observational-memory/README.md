@@ -2,6 +2,8 @@
 
 This extension adds branch-scoped, source-linked context to OMP's existing compaction. It does **not** replace the remote→handoff compactor or Mnemopi. It requires the patched OMP host's `registerCompactionSnapshot` and context-projection support; installing the extension alone on an unpatched host does not provide this behavior.
 
+The host patch is maintained in [`packages/omp-local/patches/observational-memory.patch`](../../packages/omp-local/patches/observational-memory.patch), based on OMP 18.8.7. The [local updater](../../README.md#local-host-patches) reapplies it before building and activating each release. Conflicts stop the update for an agent to port the patch; installing a stock host bypasses the required snapshot API and projection support.
+
 ## How it works
 
 1. Completed agent turns can add records to the selected branch's session ledger.
@@ -14,6 +16,7 @@ This extension adds branch-scoped, source-linked context to OMP's existing compa
     - It keeps the native summary, opaque provider payloads, and real conversation entries. Ordinarily, a separate user message follows the native summary and precedes the retained tail.
     - With Anthropic signed retained thinking, the note follows the **entire pre-commit retained tail** to preserve signed continuity.
     - With Codex remote compaction, the note follows the opaque item in request-only replay, ahead of original retained items. It is not a journal turn or system-prompt change.
+    - Without an active, nonempty snapshot, the host skips collecting note text and the observation-specific Codex compaction-item search. Codex plaintext token estimates read the selected branch without copying it.
 4. The note stays frozen until the next successful compaction.
     - Later observations do not refresh it per request. A fork uses its own selected branch ledger, not a sibling's snapshot.
     - The next handoff excludes the prior projected note from its summarizer input while retaining the real conversation.
