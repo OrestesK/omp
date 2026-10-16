@@ -26,6 +26,15 @@ You MUST NOT:
 - use Browser Relay, including `app.relay: true`, the relay CDP endpoint, or `omp browser relay`
 - run `sudo` yourself
 
+## Standing authorization
+
+For the current task, these actions are already authorized:
+- normal commits
+- non-force pushes
+- creating its PR
+
+Force pushes, including force-with-lease, still require explicit approval
+
 ## Protected actions
 
 You MUST get explicit user approval before a protected action

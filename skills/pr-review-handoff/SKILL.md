@@ -13,7 +13,7 @@ The author handoff is a recommendation, not a blocker. If the author wants to re
 
 ## Prepare the Handoff
 
-- Confirm that the PR code, description, checks, and evidence are current
+- Follow the PR preparation and readiness procedure in `skill://github-pull-requests`
 
 ## Finish with the User
 
