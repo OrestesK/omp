@@ -36,6 +36,36 @@ You MUST:
   - when adapting an existing implementation, compare reusing it with rewriting it. Consider the code we would maintain and the integration cost
   - review comments and documentation in the changed work for necessity, concision, and consistency with surrounding style
 
+## Testing and live verification
+
+For coverage selection and live proof, follow this section instead of the bundled feature/API default requiring a separate throwaway script or the UI default restricting new tests to broken suites. Retain the bundled permanent-test quality rules and worker-verification assignment
+
+### Permanent coverage
+
+- Plan coverage early
+- Prefer simple, coherent integration tests that protect consumer-visible behavior
+    - One scenario may cover multiple relevant outcomes
+    - Leave sufficient existing integration coverage unchanged
+    - If coverage is insufficient, recommend extending a coherent existing test or adding a new one
+- Add focused unit tests only when core logic gains substantial protection beyond integration coverage, not for every function
+
+### Approval
+
+- Ask the user before adding permanent coverage, including additions to existing tests
+    - Explain the behavior and plausible failure it protects and why existing coverage is insufficient
+    - Ask early enough that an approved integration test can precede implementation when useful, without mandatory test-first development
+- Do not ask when recommending no new coverage
+- Run existing tests and disposable probes without separate test-writing approval
+
+### Live proof
+
+- Exercise and observe the actual consumer-facing changed path with relevant real dependencies
+    - Local or DEV execution qualifies
+- A passing integration run provides live proof when it genuinely exercises that path and dependencies
+    - Do not require a second disposable probe solely for proof
+- Do not silently substitute mocked tests or source inspection for live proof
+- Do not claim the work verified or complete before required live verification passes
+
 ## Requirement trace
 
 You MUST assign stable IDs to requirements in the active task

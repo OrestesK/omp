@@ -8,8 +8,6 @@ When requesting plan/implementation approval, you MUST state:
   - main risks and planned verification
   - exactly what the approval permits
 
-You MUST ask the user to decide if the current task needs new tests before any are written
-
 When requesting a decision, you MUST:
 - establish shared understanding
 - step back and explain and discuss instead of presenting choices if the user is still exploring

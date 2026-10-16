@@ -33,6 +33,14 @@ For the current task, these actions are already authorized:
 - non-force pushes
 - creating its PR when the repository is not public
 
+For testing within the current task, these actions are also already authorized:
+- running ordinary in-scope tests and disposable probes, including live model calls, without separate approval for ordinary cost or resource use
+- creating, using, and cleaning up ordinary isolated, task-owned temporary test resources, including resources on external services
+
+Limits of this testing permission:
+- Before an unusually large test run or test-resource operation, use judgment, explain the expected cost and resource use, and ask the user for approval
+- Other protected actions remain subject to their existing approval requirements, including external-service changes outside this testing permission, merges, deployments, and destructive changes to pre-existing or shared resources
+
 Before creating a PR:
 - Check repository visibility
 - If the repository is public, ask the user for approval

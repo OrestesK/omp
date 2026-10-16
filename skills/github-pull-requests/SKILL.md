@@ -42,21 +42,23 @@ This check confirms freshness:
 
 ## Prepare Your PR for Human Review
 
-Live tests and supporting artifacts are recommendations, not blockers. If the author wants to request review without them, explain what is missing and continue
+Human-review handoff may proceed while required live verification is pending. Disclose its status when handing the PR back
+
+Supporting artifacts remain recommendations, not handoff blockers. If the author requests review without them, explain what is missing and continue
 
 1. Inspect the current PR, diff, intent, repository rules, and available check evidence
 2. Launch the required independent review in the background unless a still-current review already covers the change
     - Repeat review when relevant changes invalidate it, not merely because handoff is next
     - Pending review does not block publication, continued work, or human-review handoff
     - Complete the applicable independent review before merging
-3. Identify and suggest a representative live test when one would add useful evidence
-   - Draft how its result would be reported in the PR description
-   - If no useful live test is possible, always say why
+3. Check the status of the live verification required by the coding rules
+   - Draft how its result or pending status would be reported in the PR description
+   - If verification cannot be completed, state why and leave it pending
    - Keep PR checks and static checks separate from live-test evidence
 4. Decide from the change whether to suggest:
    - a diagram for an architectural change
    - a design document for a large change
-5. After meaningful changes, refresh the affected evidence and suggested tests, following the publication and review order above
+5. After meaningful changes, refresh the affected evidence and live-verification status, following the publication and review order above
 6. Immediately before declaring the PR ready for the user's review, fetch all feedback currently posted and account for it under Respond to PR Feedback
     - Include automated-review feedback already posted
     - Do not wait for future feedback before handing the PR back
@@ -96,6 +98,8 @@ Live tests and supporting artifacts are recommendations, not blockers. If the au
 
 ## Merge Your PR
 
+- Before recommending or performing an otherwise-authorized merge, require the live verification specified in the coding rules to pass
+    - The user may explicitly waive this live-verification gate
 - Before recommending or performing an authorized merge, assess current CI against repository requirements
     - If CI fails, quickly compare the failure with CI on previously merged PRs
     - Treat the same failure on previously merged PRs as nonblocking for this PR, without bypassing repository protections
