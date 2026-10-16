@@ -31,7 +31,11 @@ You MUST NOT:
 For the current task, these actions are already authorized:
 - normal commits
 - non-force pushes
-- creating its PR
+- creating its PR when the repository is not public
+
+Before creating a PR:
+- Check repository visibility
+- If the repository is public, ask the user for approval
 
 Force pushes, including force-with-lease, still require explicit approval
 
