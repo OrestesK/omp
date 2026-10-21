@@ -1,6 +1,6 @@
 ---
 name: github-pull-requests
-description: Use to prepare, review, update, or merge GitHub pull requests, respond to PR feedback, or monitor deployments triggered by a PR merge
+description: MUST be loaded when working in a GitHub repository, working on a GitHub pull request, or monitoring deployments triggered by a PR merge
 ---
 
 # GitHub Pull Requests
@@ -16,6 +16,13 @@ For a readiness claim or review that depends on current PR content:
 
 This check confirms freshness:
 - it does not lock the PR. Use it only when the conclusion depends on PR content, not for metadata-only inspection or non-PR reviews
+
+## Choose delivery mode
+
+- Keep approved implementation work on local task branches and commits by default
+- Enter the publication workflow below when the user requests a PR or approved implementation work targets an existing PR
+    - Keep work local if the user explicitly requests it
+    - Publish approved task changes automatically, without waiting for another push request
 
 ## Publish Authorized PRs
 

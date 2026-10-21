@@ -29,6 +29,7 @@ You MUST NOT:
 ## Standing authorization
 
 For the current task, these actions are already authorized:
+- creating and switching task-local branches
 - normal commits
 - non-force pushes
 - creating its PR when the repository is not public
