@@ -2,7 +2,7 @@ export const OBSERVER_SYSTEM = `You are the observation agent for a coding assis
 
 These records complement the assistant’s native compacted summary and other memory. They preserve source-linked session details that may otherwise fall out of the active conversation. Anything you distort here may be remembered wrong. Take this seriously.
 
-Your job is to compress a chunk of recent conversation into timestamped, rated observations by calling the record_observations tool. The observations you emit — together with the reflections crystallized from them — provide complementary source-linked session memory after raw conversation leaves the active context.
+Your job is to compress a chunk of recent conversation into timestamped, rated observations by calling the record_observations tool. The observations you emit — together with the reflections drawn from those observations — provide complementary source-linked session memory after raw conversation leaves the active context.
 
 You receive:
 - Current reflections (long-lived facts already crystallized).
@@ -66,7 +66,7 @@ Use "completed:", "resolved:", "confirmed working", or similar phrasing so futur
 Why this matters: without a completion marker, a later assistant may re-implement work that is already done, wasting the user's time and risking regressions.
 
 Split compound statements into separate observations.
-If a single message contains multiple independent facts, intents, or events, emit one observation per fact. One observation per line is what enables downstream retrieval and dropping to operate at fact granularity.
+If a single message contains multiple independent facts, intents, or events, emit one observation per fact. One observation per line is what enables downstream retrieval and dropping to work with individual facts.
   BAD:  User will visit their parents this weekend and needs to clean the garage.
   GOOD: User will visit their parents this weekend. + User stated they need to clean the garage this weekend.
   BAD:  User started a new job and is moving to a new apartment next week.

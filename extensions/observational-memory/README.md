@@ -2,7 +2,7 @@
 
 This extension adds branch-scoped, source-linked context to OMP's existing compaction. It does **not** replace the remote→handoff compactor or Mnemopi. It requires the patched OMP host's `registerCompactionSnapshot` and context-projection support; installing the extension alone on an unpatched host does not provide this behavior.
 
-The host patch is maintained in [`packages/omp-local/patches/observational-memory.patch`](../../packages/omp-local/patches/observational-memory.patch), based on OMP 18.8.7. The [local updater](../../README.md#local-host-patches) reapplies it before building and activating each release. Conflicts stop the update for an agent to port the patch; installing a stock host bypasses the required snapshot API and projection support.
+The host patch is maintained in [`packages/omp-local/patches/observational-memory.patch`](../../packages/omp-local/patches/observational-memory.patch), based on OMP 18.12.6. The [local updater](../../README.md#local-host-patches) reapplies it before building and activating each release. Conflicts stop the update for an agent to port the patch; installing a stock host bypasses the required snapshot API and projection support.
 
 ## How it works
 
