@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "libtmux": "0.1.0-alpha.13",
+      },
+    },
+  },
+  "packages": {
+    "libtmux": ["libtmux@0.1.0-alpha.13", "", {}, "sha512-3iQDyROFzwLLJpWyPXmIkqLKfOBd5oLRzXy7ducZzbR8CPkQUt1EU4h65+H7wtxyURFSfPCpjFQB3hOoLURj2A=="],
+  }
+}
