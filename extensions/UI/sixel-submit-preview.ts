@@ -5,9 +5,6 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import {
 	Container,
 	Image,
-	ImageProtocol,
-	isImageProtocolForced,
-	setTerminalImageProtocol,
 	Spacer,
 	Text,
 } from "@oh-my-pi/pi-tui";
@@ -58,7 +55,6 @@ function previewComponent(images: readonly ImageContent[], previewId: string, th
 }
 
 export default function sixelSubmitPreview(pi: ExtensionAPI): void {
-	if (!isImageProtocolForced()) setTerminalImageProtocol(ImageProtocol.Sixel);
 	let pendingImages: ImageContent[] = [];
 	const previews = new Map<string, readonly ImageContent[]>();
 

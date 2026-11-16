@@ -1,4 +1,4 @@
-import { Text } from "@oh-my-pi/pi-tui";
+import { Text, type Component } from "@oh-my-pi/pi-tui";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import {
   toolRenderers,
@@ -7,7 +7,9 @@ import {
   type ToolRenderer,
 } from "@oh-my-pi/pi-tui/tools";
 import type { EvalStatusEvent, EvalToolDetails } from "@oh-my-pi/pi-tui/tools/eval";
+import type { CoordinationDetails } from "@oh-my-pi/pi-tui/tools/wait";
 import type { Theme } from "@oh-my-pi/pi-tui/theme";
+import { formatStatusIcon, renderCompactToolHeader, truncateToWidth } from "@oh-my-pi/pi-tui/render";
 
 // Tweak these to adjust the compact presentation without touching renderer logic.
 const VIEW = {
@@ -33,6 +35,7 @@ interface EvalArgs {
 
 interface ActivitySummary {
   key?: string;
+  op?: string;
   action: string;
   operation?: string;
   target?: string;
@@ -53,10 +56,12 @@ interface NestedActivity {
   operation?: string;
   target?: string;
   outcome?: string;
+  compactMessage?: string;
   hasError?: boolean;
   error?: string;
   key?: string;
   children?: ActivitySummary[];
+  compactChildren?: ActivitySummary[];
 }
 
 interface EvalCapture {
@@ -238,7 +243,7 @@ function childSummary(
   return { ...summary(action, detail, meta, error), key };
 }
 
-function taskChildren(details: unknown): ActivitySummary[] {
+function taskChildren(details: unknown, compact: boolean): ActivitySummary[] {
   if (!isRecord(details)) return [];
   const progress = records(details.progress);
   const results = records(details.results);
@@ -255,17 +260,24 @@ function taskChildren(details: unknown): ActivitySummary[] {
       (results.includes(item) ? (terminalFailure ? "failed" : "completed") : "running");
     const failed = /^(?:failed|error|aborted|cancelled)$/iu.test(status) || terminalFailure;
     const tool = cleanLine(item.currentTool);
-    const intent = cleanLine(
-      item.lastIntent ?? item.currentToolArgs ?? item.assignment ?? item.description,
-    );
+    const intent = cleanLine(compact
+      ? item.currentToolIntent ?? item.lastIntent ?? item.currentToolArgs
+      : item.lastIntent ?? item.currentToolArgs ?? item.assignment ?? item.description);
     const current = [tool && sentence(tool), intent].filter(Boolean).join(" · ");
     const tools = typeof item.toolCount === "number" ? count(item.toolCount, "tool") : "";
     const elapsed = durationText(item.durationMs);
     const failure = failed
       ? shorten(detailText(item.error ?? item.abortReason ?? item.stderr ?? item.output), 100)
       : "";
+    const finished = results.includes(item);
+    const outcome = finished && !failed
+      ? shorten(cleanLine((item.output as string).split("\n").find(line => line.trim())), 100)
+      : "";
     const identity = [id, agent && "‹" + agent + "›"].filter(Boolean).join(" ");
-    const activity = [status, current && "— " + current].filter(Boolean).join(" ");
+    const activity = compact
+      ? [status, !finished && current && "— " + current, finished && outcome && "— " + outcome]
+          .filter(Boolean).join(" ")
+      : [status, current && "— " + current].filter(Boolean).join(" ");
     const detail = [identity, activity, failure && "— " + failure]
       .filter(Boolean)
       .join(" · ");
@@ -275,7 +287,7 @@ function taskChildren(details: unknown): ActivitySummary[] {
         "agent:" + id,
         "Agent",
         detail,
-        [tools, elapsed].filter(Boolean).join(" · "),
+        compact ? elapsed : [tools, elapsed].filter(Boolean).join(" · "),
         failed,
       ),
     );
@@ -283,7 +295,7 @@ function taskChildren(details: unknown): ActivitySummary[] {
   return [...byId.values()];
 }
 
-function waitChildren(details: unknown): ActivitySummary[] {
+function waitChildren(details: unknown, compact: boolean): ActivitySummary[] {
   if (!isRecord(details)) return [];
   const jobs = records(details.jobs);
   const agents = records(details.agents);
@@ -291,14 +303,23 @@ function waitChildren(details: unknown): ActivitySummary[] {
     const id = cleanLine(item.id) || "job-" + (index + 1);
     const status = cleanLine(item.status) || "unknown";
     const errorText = detailText(item.errorText);
-    const resultText = detailText(item.resultText);
     const failed = /^(?:failed|error|aborted|cancelled)$/iu.test(status) || Boolean(errorText);
+    const resultText = detailText(item.resultText);
     const current = cleanLine(item.label);
-    const excerpt = shorten(errorText || resultText, 100);
-    const activity = [status, current && "— " + current].filter(Boolean).join(" ");
-    const detail = [id, activity, excerpt && (failed ? "— " : "→ ") + excerpt]
-      .filter(Boolean)
-      .join(" · ");
+    const excerpt = compact
+      ? failed ? shorten(errorText || resultText, 100)
+        : status === "completed" ? shorten(firstResultLine(resultText), 100) : ""
+      : shorten(errorText || resultText, 100);
+    const currentActivity = compact && !failed && !excerpt
+      ? shorten(cleanLine(item.stage ?? item.label), 48) : "";
+    const activity = compact
+      ? [status, currentActivity && "— " + currentActivity].filter(Boolean).join(" ")
+      : [status, current && "— " + current].filter(Boolean).join(" ");
+    const detail = compact
+      ? `${id} · ${activity}${excerpt ? ` ${failed ? "—" : "→"} ${excerpt}` : ""}`
+      : [id, activity, excerpt && (failed ? "— " : "→ ") + excerpt]
+          .filter(Boolean)
+          .join(" · ");
     return childSummary(
       "job:" + id,
       "Job",
@@ -364,17 +385,20 @@ function toolActivity(
   let operation = "";
   let target = "";
   let children: ActivitySummary[] | undefined;
+  let compactChildren: ActivitySummary[] | undefined;
 
   if (toolName === "task") {
     label = "Task";
-    children = taskChildren(details);
+    children = taskChildren(details, false);
+    compactChildren = taskChildren(details, true);
     operation = cleanLine(input.agent ?? input.label);
     target = children.length > 0
       ? count(children.length, "agent")
       : count(records(input.tasks).length, "task");
   } else if (toolName === "wait") {
     label = "Wait";
-    children = waitChildren(details);
+    children = waitChildren(details, false);
+    compactChildren = waitChildren(details, true);
     if (isRecord(details)) {
       const jobs = records(details.jobs).length;
       const agents = records(details.agents).length;
@@ -416,6 +440,15 @@ function toolActivity(
   const error = isError ? shorten(cleanLine(text), 500) : undefined;
   const typedOutcome = structuredOutcome(toolName, details);
   const genericInput = primitiveExcerpt(input);
+  const waited = toolName === "wait"
+    ? (details as CoordinationDetails | undefined)?.waited
+    : undefined;
+  const compactMessage = waited
+    ? [
+        "from " + cleanLine(waited.from),
+        shorten(cleanLine(waited.body.split("\n").find(line => line.trim())), 100),
+      ].join(" · ")
+    : undefined;
   const allowTextFallback = toolName.startsWith("mcp__") || !isRecord(details);
   const identity = cleanLine(input.id ?? input.name);
   return {
@@ -427,9 +460,11 @@ function toolActivity(
     outcome: isError
       ? undefined
       : typedOutcome || (allowTextFallback ? firstResultLine(text) : "") || undefined,
+    compactMessage,
     range: toolName === "read" ? lineRange(input.offset, input.limit) || undefined : undefined,
     key: identity ? normalizedOp + ":" + identity : undefined,
     children,
+    compactChildren,
     ...(isError ? { hasError: true, error: error || "Failed" } : {}),
   };
 }
@@ -468,7 +503,7 @@ function enrichDetails(details: EvalToolDetails, activities: NestedActivity[]): 
   };
 }
 
-function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
+function baseEventSummary(event: EvalStatusEvent, compact: boolean): ActivitySummary {
   const op = cleanLine(event.op);
   const error = cleanLine(event.error);
   const path = shortenPath(event.path) || shortenPath(event.target);
@@ -476,6 +511,10 @@ function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
   if (hasError) {
     const detail = [path, error || "Failed"].filter(Boolean).join(" · ");
     return summary(sentence(cleanLine(event.label) || op), detail, "", true);
+  }
+  if (compact && op === "wait") {
+    const message = cleanLine(event.compactMessage);
+    if (message) return summary("Wait", message);
   }
   const chars = count(event.chars, "char");
   const matches = count(event.count, op === "glob" ? "file" : "match");
@@ -518,9 +557,9 @@ function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
       const id = cleanLine(event.id) || "agent";
       const status = cleanLine(event.status) || "running";
       const currentTool = cleanLine(event.currentTool);
-      const currentIntent = cleanLine(
-        event.lastIntent ?? event.currentToolArgs ?? event.taskPreview,
-      );
+      const currentIntent = cleanLine(compact
+        ? event.currentToolArgs ?? event.lastIntent
+        : event.lastIntent ?? event.currentToolArgs ?? event.taskPreview);
       const current = [currentTool && sentence(currentTool), currentIntent]
         .filter(Boolean)
         .join(" · ");
@@ -532,7 +571,7 @@ function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
       return summary(
         "Agent",
         `${id} · ${status}${current ? ` — ${current}` : ""}`,
-        [tools, elapsed].filter(Boolean).join(" · "),
+        compact ? elapsed : [tools, elapsed].filter(Boolean).join(" · "),
       );
     }
     case "judge_batch": {
@@ -584,6 +623,14 @@ function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
     case "git_diff":
       return summary("Git", event.staged ? "Staged diff" : "Diff", count(event.lines, "line"));
     default: {
+      if (compact && op === "browser") {
+        return semanticSummary(
+          "Browser",
+          cleanLine(event.operation ?? event.action),
+          shortenPath(event.target ?? event.path),
+          cleanLine(event.outcome),
+        );
+      }
       const action = cleanLine(event.label) || sentence(op);
       const operation = cleanLine(event.operation);
       const target = cleanLine(event.target);
@@ -602,9 +649,12 @@ function baseEventSummary(event: EvalStatusEvent): ActivitySummary {
     }
   }
 }
-function eventSummary(event: EvalStatusEvent): ActivitySummary {
-  const base = baseEventSummary(event);
-  const children = records(event.children).map((item, index) => ({
+function eventSummary(event: EvalStatusEvent, compact: boolean): ActivitySummary {
+  const base = baseEventSummary(event, compact);
+  const compactChildren = (event as EvalStatusEvent & { compactChildren?: ActivitySummary[] }).compactChildren;
+  const children = records(compact && (event.op === "task" || event.op === "wait")
+    ? compactChildren ?? event.children
+    : event.children).map((item, index) => ({
     key: cleanLine(item.key) || "child:" + index,
     action: shorten(cleanLine(item.action) || "Item"),
     operation: shorten(cleanLine(item.operation)) || undefined,
@@ -619,6 +669,7 @@ function eventSummary(event: EvalStatusEvent): ActivitySummary {
   const key = identity ? (identity.includes(":") ? identity : op + ":" + identity) : undefined;
   return {
     ...base,
+    op,
     key,
     error: base.error || children.some((child) => child.error),
     children: children.length > 0 ? children : undefined,
@@ -670,6 +721,29 @@ function header(
     .join(" ");
 }
 
+function compactHeader(
+  args: EvalArgs | undefined,
+  details: EvalToolDetails | undefined,
+  options: RenderResultOptions,
+  theme: Theme,
+  phase: "Preparing" | "Running" | undefined,
+  width: number,
+): string {
+  const elapsed = totalDuration(details);
+  const state = phase ?? "Done";
+  return renderCompactToolHeader(
+    {
+      icon: formatStatusIcon(options.isPartial ? "running" : "done", theme, options.isPartial ? options.spinnerFrame : undefined),
+      name: "Eval",
+      target: titleOf(args),
+      facts: elapsed ? [state, elapsed] : [state],
+      fitTarget: truncateToWidth,
+    },
+    theme,
+    width,
+  );
+}
+
 function fallbackSummary(
   result: EvalResult,
   isError: boolean,
@@ -706,7 +780,13 @@ function renderChildren(
   indent: string,
 ): string[] {
   const children = value.children ?? [];
-  const shown = expanded ? children : children.slice(0, VIEW.maxCollapsedChildren);
+  const limit = !expanded && (value.op === "task" || value.op === "wait" || value.op === "browser")
+    ? 2
+    : VIEW.maxCollapsedChildren;
+  const ordered = !expanded && (value.op === "task" || value.op === "wait")
+    ? [...children].sort((a, b) => Number(b.error) - Number(a.error))
+    : children;
+  const shown = expanded ? children : ordered.slice(0, limit);
   const lines = shown.map((child, index) => {
     const hasOverflow = !expanded && children.length > shown.length;
     const branch = index === shown.length - 1 && !hasOverflow ? VIEW.branch.last : VIEW.branch.middle;
@@ -726,10 +806,10 @@ function renderCollapsed(
   options: RenderResultOptions,
   theme: Theme,
   args?: EvalArgs,
-): Text {
+): Component {
   const details = result.details;
   const isError = result.isError === true || details?.isError === true;
-  const summaries = eventsOf(details).map(eventSummary);
+  const summaries = eventsOf(details).map((event) => eventSummary(event, true));
   const unique = summaries.filter((value, index, all) => {
     const key = summaryKey(value);
     return all.findLastIndex((candidate) => summaryKey(candidate) === key) === index;
@@ -740,9 +820,7 @@ function renderCollapsed(
   const hiddenError = unique.slice(0, -VIEW.maxCollapsedRows).findLast((value) => value.error);
   if (hiddenError && !shown.some((value) => value.error)) shown[0] = hiddenError;
 
-  const lines = [
-    header(args, details, options, theme, isError, options.isPartial ? "Running" : undefined),
-  ];
+  const lines: string[] = [];
   for (const [index, value] of shown.entries()) {
     const branch = index === shown.length - 1 ? VIEW.branch.last : VIEW.branch.middle;
     lines.push(VIEW.indent + theme.fg(VIEW.metaColor, branch) + renderSummary(value, theme));
@@ -753,7 +831,29 @@ function renderCollapsed(
       `${VIEW.indent}${theme.fg(VIEW.metaColor, `… ${unique.length - shown.length} earlier (ctrl+o to expand)`)}`,
     );
   }
-  return new Text(lines.join("\n"), 0, 0);
+  if (isError) {
+    return new Text(
+      [header(args, details, options, theme, true, options.isPartial ? "Running" : undefined), ...lines].join("\n"),
+      0,
+      0,
+    );
+  }
+
+  const body = new Text(lines.join("\n"), 0, 0);
+  return {
+    render(width: number): readonly string[] {
+      return [
+        compactHeader(args, details, options, theme, options.isPartial ? "Running" : undefined, width),
+        ...body.render(width),
+      ];
+    },
+    invalidate() {
+      body.invalidate();
+    },
+    releaseRenderCaches() {
+      body.releaseRenderCaches();
+    },
+  };
 }
 
 function renderExpanded(
@@ -773,7 +873,7 @@ function renderExpanded(
       ? [{ code: args.code, language: args.language, title: args.title }]
       : (details?.cells ?? []);
   const output = resultText(result);
-  const events = eventsOf(details).map(eventSummary);
+  const events = eventsOf(details).map((event) => eventSummary(event, false));
 
   if (sources.length === 0) {
     lines.push(theme.fg(VIEW.metaColor, `${VIEW.indent}Source`));
@@ -825,11 +925,18 @@ const compactEvalRenderer = {
     return { label: titleOf(args) };
   },
   renderCall(args: EvalArgs, options: RenderResultOptions, theme: Theme) {
-    return new Text(
-      header(args, undefined, { ...options, isPartial: true }, theme, false, "Preparing"),
-      0,
-      0,
-    );
+    if (options.expanded) {
+      return new Text(
+        header(args, undefined, { ...options, isPartial: true }, theme, false, "Preparing"),
+        0,
+        0,
+      );
+    }
+    return {
+      render(width: number): readonly string[] {
+        return [compactHeader(args, undefined, { ...options, isPartial: true }, theme, "Preparing", width)];
+      },
+    };
   },
   renderResult(result: EvalResult, options: RenderResultOptions, theme: Theme, args?: EvalArgs) {
     return options.expanded
