@@ -1,6 +1,6 @@
 ---
 alwaysApply: true
-agents: [task, sonic, scout, reviewer, security-reviewer, slice-writer, run-monitor, web-researcher, sub, "m[0-9]*"]
+agents: [task, sonic, scout, reviewer, security-reviewer, run-monitor, web-researcher, sub, "m[0-9]*"]
 ---
 
 # Subagents

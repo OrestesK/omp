@@ -174,7 +174,7 @@ class AuditSceneTests(unittest.TestCase):
         self.assertIn("small-bound-text", self.finding_codes(result))
         self.assertNotIn("unbound-semantic-arrow", self.finding_codes(result))
 
-    def test_overview_budget_rejects_too_many_nodes_and_edges(self) -> None:
+    def test_overview_counts_are_metrics_not_errors(self) -> None:
         many_arrows = [
             arrow(f"arrow-{index}", "node-0", "node-1") for index in range(12)
         ]
@@ -183,9 +183,9 @@ class AuditSceneTests(unittest.TestCase):
             scene(node_count=10, arrows=many_arrows), mode="overview"
         )
 
-        self.assertTrue(result.has_errors)
-        self.assertIn("overview-node-budget", self.finding_codes(result))
-        self.assertIn("overview-edge-budget", self.finding_codes(result))
+        self.assertFalse(result.has_errors)
+        self.assertEqual(10, result.metrics["semanticNodes"])
+        self.assertEqual(12, result.metrics["semanticArrows"])
 
     def test_single_unbound_semantic_arrow_warns_but_annotation_arrow_is_allowed(
         self,
@@ -248,7 +248,7 @@ class AuditSceneTests(unittest.TestCase):
         self.assertIn("nonstandard-arrow-style", codes)
         self.assertIn("complex-arrow-route", codes)
 
-    def test_technical_mode_does_not_apply_overview_budgets(self) -> None:
+    def test_technical_mode_counts_are_metrics_without_auto_warning(self) -> None:
         many_arrows = [
             arrow(f"arrow-{index}", "node-0", "node-1") for index in range(20)
         ]
@@ -257,10 +257,9 @@ class AuditSceneTests(unittest.TestCase):
             scene(node_count=20, arrows=many_arrows), mode="technical"
         )
 
-        self.assertNotIn("overview-node-budget", self.finding_codes(result))
-        self.assertNotIn("overview-edge-budget", self.finding_codes(result))
-        self.assertIn("technical-visual-review-required", self.finding_codes(result))
-        self.assertTrue(result.has_warnings)
+        self.assertEqual(20, result.metrics["semanticNodes"])
+        self.assertEqual(20, result.metrics["semanticArrows"])
+        self.assertFalse(result.has_warnings)
         self.assertFalse(result.has_errors)
 
     def test_technical_mode_reports_overlap_as_warning(self) -> None:
@@ -430,7 +429,9 @@ class AuditSceneTests(unittest.TestCase):
         self.assertEqual(3, warning.returncode)
         self.assertEqual("review-required", json.loads(warning.stdout)["status"])
 
-        error = self.run_cli(json.dumps(scene(node_count=10)))
+        error = self.run_cli(
+            json.dumps(scene(arrows=[arrow("dangling", "node-0", "absent")]))
+        )
         self.assertEqual(1, error.returncode)
         self.assertEqual("fail", json.loads(error.stdout)["status"])
 

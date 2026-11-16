@@ -1,201 +1,62 @@
-# Excalidraw Skill Cheatsheet
+# Excalidraw operations and native format
 
-## Defaults
+This reference owns the local canvas lifecycle and native input formats. Use CLI `help [command]` or available MCP tool schemas for full command parameters. Design and rendered validation belong to [diagram design](../../diagram-design/SKILL.md). Native audit and operations belong to [the Excalidraw skill](../SKILL.md), with native styling in [its profile](orestes-clean-style.md)
 
-- Canvas base URL in this setup: `http://127.0.0.1:23187`, supplied by `EXPRESS_SERVER_URL` in the CLI prefix from `SKILL.md`. The package defaults to `http://127.0.0.1:3000` without that setting
-- Canvas health: `GET /health` or `status`
-- Auto-start is disabled in this setup. Run `start` explicitly before canvas work
+## Live canvas and lifecycle
 
-## CLI Reference
-
-Append the bare subcommands below to the pinned, per-invocation CLI prefix in `SKILL.md` Step 0.
-JSON results on stdout — except `describe` (plain text) and raw-content output when `--out` is omitted (`export` scene JSON, `screenshot --format svg`). Diagnostics on stderr. Exit codes: 0 ok, 1 error, 2 usage, 3 canvas unreachable, 4 browser tab required. Explicit `start` overrides `EXCALIDRAW_NO_AUTOSTART=1`
-
-### Server
-
-| Command | Description |
-|---------|-------------|
-| `start` | Start the canvas server (detached); prints URL + pid |
-| `stop` | Stop the identity-checked canvas server at the configured URL (not task-ownership-aware; follow the stop rule in `SKILL.md`) |
-| `status` | Health, element count, connected browser tabs |
-
-### Elements
-
-| Command | Description |
-|---------|-------------|
-| `add [file\|-]` | Batch create from a JSON array (file, `-`, or piped stdin); `--one '{...}'` for a single element |
-| `apply [file\|-]` | Multi-op patch `{"create":[...],"update":[{"id":"a","set":{...}}],"delete":["id",...]}` in one call |
-| `get <id>` | Get one element |
-| `query` | `--type rectangle` `--bbox x0,y0,x1,y1` `--filter locked=true` (typed; nested keys like `label.text=API` work) `--filter-json '{...}'` |
-| `update <id> --set '{...}'` | Update one element |
-| `delete <id> [...]` | Delete elements |
-
-### Scene
-
-| Command | Description |
-|---------|-------------|
-| `describe` | AI-readable scene summary (ids, positions, labels, connections) — plain text |
-| `screenshot` | PNG/SVG capture; `--out f.png`, `--format png\|svg`, `--no-background`; PNG without `--out` → temp file path in JSON, SVG without `--out` → raw SVG (**browser tab required**) |
-| `export [--out f.excalidraw]` | Scene as .excalidraw JSON (stdout without `--out`) |
-| `import [file\|-] [--replace]` | Import .excalidraw JSON (merge by default) |
-| `mermaid [file\|-]` | Render Mermaid onto the canvas (**browser tab required**) |
-| `share` | Encrypted upload → shareable excalidraw.com URL |
-| `clear --yes` | Wipe the canvas |
-| `snapshot save\|list\|restore [name]` | Named canvas snapshots |
-
-### Arrange
-
-| Command | Description |
-|---------|-------------|
-| `arrange align --ids a,b,c --to left\|center\|right\|top\|middle\|bottom` | Align (≥2 ids) |
-| `arrange distribute --ids a,b,c --to horizontal\|vertical` | Even spacing (≥3 ids) |
-| `arrange group --ids a,b` / `arrange ungroup --group <groupId>` | Group membership lives on element `groupIds` |
-| `arrange lock\|unlock --ids a,b` | Toggle edit lock |
-| `arrange duplicate --ids a,b [--offset 20,20]` | Clone with offset |
-
-### Meta
-
-| Command | Description |
-|---------|-------------|
-| `install-skill --dir <skills-root>` | Install this skill into an agent-chosen project/global skills root (replaces any existing copy) |
-| `help [command]`, `--version` | Usage and version |
-
-## MCP Tools (26 total)
-
-### Element CRUD
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `create_element` | Create shape/text/arrow/line | `type`, `x`, `y` |
-| `get_element` | Get single element by ID | `id` |
-| `update_element` | Update element properties | `id` |
-| `delete_element` | Delete element | `id` |
-| `query_elements` | Query by type/filters | (optional) `type`, `filter`, `bbox` |
-| `batch_create_elements` | Create many at once | `elements[]` |
-| `duplicate_elements` | Clone with offset | `elementIds[]`, (optional) `offsetX`, `offsetY` |
-
-### Layout & Organization
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `align_elements` | Align to left/center/right/top/middle/bottom | `elementIds[]`, `alignment` |
-| `distribute_elements` | Even spacing horizontal/vertical | `elementIds[]`, `direction` |
-| `group_elements` | Group elements | `elementIds[]` |
-| `ungroup_elements` | Ungroup | `groupId` |
-| `lock_elements` | Lock elements | `elementIds[]` |
-| `unlock_elements` | Unlock elements | `elementIds[]` |
-
-### Scene Awareness (Iterative Refinement)
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `describe_scene` | AI-readable scene description (types, positions, labels, connections, bounding box) | (none) |
-| `get_canvas_screenshot` | Returns PNG image of canvas for visual verification | (optional) `background` |
-| `get_resource` | Get scene/library/theme/elements | `resource` |
-
-### File I/O & Export
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `export_scene` | Export to .excalidraw JSON | (optional) `filePath` |
-| `import_scene` | Import from .excalidraw JSON | `mode` ("replace"\|"merge"), `filePath` or `data` |
-| `export_to_image` | Export to PNG/SVG (needs browser) | `format` ("png"\|"svg"), (optional) `filePath`, `background` |
-| `export_to_excalidraw_url` | Upload & get shareable excalidraw.com URL | (none) |
-
-### State Management
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `clear_canvas` | Remove all elements | (none) |
-| `snapshot_scene` | Save named snapshot | `name` |
-| `restore_snapshot` | Restore from snapshot | `name` |
-
-### Viewport & Camera
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `set_viewport` | Control camera: zoom-to-fit, center on element, manual zoom/scroll (needs browser) | (optional) `scrollToContent`, `scrollToElementId`, `zoom`, `offsetX`, `offsetY` |
-
-### Design Guide
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `read_diagram_guide` | Get design best practices (colors, sizing, layout, anti-patterns) | (none) |
-
-### Conversion
-
-| Tool | Description | Required params |
-|------|-------------|-----------------|
-| `create_from_mermaid` | Mermaid diagram to Excalidraw | `mermaidDiagram` |
-
-Notes:
-- **CLI + MCP**: Set `text` on shapes to label them (auto-converts to `label.text`). Use `startElementId`/`endElementId` on arrows
-- **CLI `apply.update`**: Update entries can use either direct fields (`{"id":"a","x":120}`) or a `set` object (`{"id":"a","set":{"x":120}}`). Do not mix both forms in one update entry
-- **Raw REST**: Use `"label": {"text": "..."}` for shape labels. Use `"start": {"id": "..."}` / `"end": {"id": "..."}` for arrow binding. (Different format!)
-- `fontFamily` must be a string (e.g. `"1"`, `"helvetica"`) or omitted — do NOT pass a number
-- `points` accepts both `[[x,y]]` tuples and `[{x,y}]` objects
-- **Curved arrows**: Use `"roundness": {"type": 2}` with 3+ points for smooth curves. Use `"elbowed": true` for right-angle routing
-- Prefer creating shapes first, then arrows, then alignment/grouping
-
-## Canvas REST API (HTTP)
-
-### Elements
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/elements` | List all elements |
-| `GET` | `/api/elements/:id` | Get element by ID |
-| `POST` | `/api/elements` | Create element |
-| `PUT` | `/api/elements/:id` | Update element |
-| `DELETE` | `/api/elements/:id` | Delete element |
-| `DELETE` | `/api/elements/clear` | Clear all elements |
-| `GET` | `/api/elements/search?type=...` | Search with filters (exact string match + bbox) |
-| `POST` | `/api/elements/batch` | Batch create |
-| `POST` | `/api/elements/sync` | Overwrite import (clear + write) |
-| `POST` | `/api/elements/from-mermaid` | Mermaid conversion via frontend |
-
-### Export
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/export/image` | Request image export (needs frontend) |
-| `POST` | `/api/export/image/result` | Frontend posts export result back |
-
-### Viewport
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/viewport` | Set viewport/camera (needs frontend) |
-| `POST` | `/api/viewport/result` | Frontend posts viewport result back |
-
-### Snapshots
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/snapshots` | Save snapshot `{name}` |
-| `GET` | `/api/snapshots` | List snapshots |
-| `GET` | `/api/snapshots/:name` | Get snapshot by name |
-
-### System
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check (`websocket_clients` = open browser tabs) |
-| `GET` | `/api/sync/status` | Memory/WebSocket stats |
-
-## Native Scene Audit
-
-Resolve the skill directory from the loaded `SKILL.md`:
+The CLI and MCP tools address the same canvas at `http://127.0.0.1:23187`, rather than the package's default port 3000. Prefix every CLI invocation with:
 
 ```bash
-python /absolute/path/to/excalidraw-skill/scripts/audit_scene.py diagram.excalidraw --mode overview
-python /absolute/path/to/excalidraw-skill/scripts/audit_scene.py diagram.excalidraw --mode technical --json
+EXPRESS_SERVER_URL=http://127.0.0.1:23187 EXCALIDRAW_NO_AUTOSTART=1 pnpm dlx mcp-excalidraw-server@1.1.0 <command>
 ```
 
-Exit codes: `0` clean, `1` blocked, `2` invalid input, `3` review required. Warning-only scenes are never reported as `PASS`. Technical mode always returns review-required because static JSON checks cannot prove panel/read-order quality. The audit does not replace rendered-image review
+- Run `start` explicitly before canvas work. It overrides no-autostart and either starts a detached server or reports the existing server. Without it, canvas-touching commands cannot start a missing server
+- Check `status` or `GET /health` for health and browser connections
+- Record the PID when this task's `start` reports `spawned: true`
+- Never stop a preexisting or shared server. `stop` checks server identity but not task ownership. Use it only when `status` still reports this task's recorded PID and no other task or user uses the server. Otherwise leave it running
+- Ensure a frontend tab is connected for screenshots, image export, Mermaid conversion and viewport operations. An available managed local browser can open `http://127.0.0.1:23187`, or the user can open it. CLI exit code 4 means a browser tab is required
+- Before editing or replacing a scene that must survive server shutdown, export it as native `.excalidraw`. Named snapshots exist only while the server runs and do not substitute for a durable export
+- Do not clear or replace a preexisting scene without approval to discard it. `import scene.excalidraw` merges by default, while `--replace` replaces the scene
+- Export the final scene durably with prefixed CLI `export --out scene.excalidraw`. Image export and share links are not native scene backups
+- MCP `export_scene` with `filePath` is restricted to the configured `EXCALIDRAW_EXPORT_DIR` or, when unset, the MCP process's working directory. Use CLI export for destinations outside that directory
 
-## Design Guide (quick version)
+CLI output is JSON on stdout except `describe` (plain text), `export` without `--out` (raw scene JSON), and SVG screenshot without `--out` (raw SVG). Diagnostics go to stderr. CLI exit codes are 0 success, 1 error, 2 usage, 3 canvas unreachable and 4 browser tab required
 
-Fallback stroke/fill pairs when semantic color is actually useful: `#e03131`/`#ffc9c9` red, `#2f9e44`/`#b2f2bb` green, `#1971c2`/`#a5d8ff` blue, `#9c36b5`/`#eebefa` purple, `#e8590c`/`#ffd8a8` orange, `#0c8599`/`#99e9f2` cyan, `#868e96`/`#e9ecef` gray. This palette is optional. Monochrome is the baseline
+## Choose the interface
 
-Read `orestes-clean-style.md` and `quality-gates.md` for the full design contract. MCP mode's `read_diagram_guide` is fallback guidance and does not override the local profile
+- Prefer available Excalidraw MCP tools for scene work. Their results and screenshots return directly. Use the live tool schemas for parameters. MCP and CLI share the live canvas, but MCP does not expose the CLI server-start command
+- Otherwise use the prefixed CLI. Common subcommands are `start`, `status`, `add elements.json`, `add --one '{...}'`, `apply patch.json`, `get <id>`, `query`, `describe`, `update <id> --set '{...}'`, `screenshot --out scene.png` and `export --out scene.excalidraw`. Input arrays and patches can come from a file or stdin (`-`). Use `help [command]` for other commands and flags
+- Use raw HTTP when needed from application code. The server must already be running. Relevant endpoints include `GET /health`, `GET /api/elements`, `POST /api/elements/batch`, `PUT /api/elements/:id` and `POST /api/elements/sync` (overwrite import). Raw REST takes a different format from normalized CLI/MCP input. Image export and viewport endpoints need the frontend
+
+## Native element and patch details
+
+- CLI and MCP normalize an agent-friendly shape such as `{"id":"service","type":"rectangle","x":100,"y":80,"width":180,"height":60,"text":"Service"}` into an Excalidraw shape with a bound label
+- For semantic arrows, create endpoint shapes first and pass their IDs as `startElementId` and `endElementId`
+- A genuine free annotation pointer intentionally lacks semantic endpoint binding. After the final live export, set `"customData":{"auditRole":"annotation"}` on that arrow in the native `.excalidraw` file before audit and delivery. Do not mark semantic relationships as annotations
+- Live create, update and import do not preserve that marker. A later live re-export requires reapplying it to the final native file. The marker is nonvisual, so keep the live rendering and final native visible content consistent
+- Pass `fontFamily` as a string name such as `"helvetica"` or a string digit such as `"1"`, not a number. `points` accepts `[[x,y],...]` or `[{"x":x,"y":y},...]`
+- A CLI `apply` patch uses `{"create":[...],"update":[{"id":"service","set":{"x":120}}],"delete":["old-id"]}`. An update can instead use direct fields such as `{"id":"service","x":120}`. Do not mix direct fields and `set` in one update entry
+- Raw REST requires `"label":{"text":"Service"}` for a bound shape label and `"start":{"id":"a"},"end":{"id":"b"}` for arrow bindings. Do not send the CLI/MCP shorthand directly to REST
+- A boundary rectangle with `text` or `label.text` receives a centered bound label that can overlap its contents. Use separate free-standing text at the upper-left of the scope instead:
+
+  ```json
+  [
+    {"id":"vpc-zone","type":"rectangle","x":50,"y":50,"width":800,"height":400,"backgroundColor":"transparent","strokeColor":"#adb5bd","strokeStyle":"dashed"},
+    {"id":"vpc-label","type":"text","x":70,"y":60,"width":300,"height":30,"text":"VPC (10.0.0.0/16)","fontSize":18}
+  ]
+  ```
+
+- An arrow label appears at its midpoint and may overlap a short route. Inspect the rendering. `{"roundness":{"type":2}}` with three or more points creates a curve, and `{"elbowed":true}` provides right-angle routing when needed
+- The frontend's scene sync can create bound text elements for labeled shapes. Inspect native and rendered output rather than inferring a duplicate solely from the element count
+
+## Native audit
+
+When structural checking is warranted or requested, run the audit on the native export. Resolve the script relative to this loaded skill directory:
+
+```bash
+python /absolute/path/to/excalidraw-skill/scripts/audit_scene.py scene.excalidraw --mode overview
+python /absolute/path/to/excalidraw-skill/scripts/audit_scene.py scene.excalidraw --mode technical --json
+```
+
+- Status 0 is clean, 1 blocked, 2 invalid input and 3 review required. The native audit cannot prove rendered readability or semantic completeness
+- For explicitly requested completeness or traceability work, see [semantic traceability](semantic-traceability.md) for the optional manifest tool. A manifest is not required for routine diagrams

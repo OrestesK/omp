@@ -26,14 +26,14 @@ When triaging many findings, report all findings that should **not** become issu
 ## Ticketability Gate
 
 Before drafting a new issue, establish:
-1. **Actual problem:** A current observable failure, gap, or missing behavior exists
-2. **Impact:** Evidence establishes why it matters:
-   - volume alone is not impact
-3. **Current state:** The problem is not already fixed or only historical
-4. **Ownership:** The proposed repository and subsystem own the affected boundary
-5. **Evidence strength:** The title, context, and goal do not exceed what the evidence proves
-6. **No duplicate:** No existing issue already owns the same outcome
-7. **Right artifact:** A new issue is better than an evidence comment, telemetry cleanup, configuration correction, existing issue update, or no action
+- **Actual problem:** A current observable failure, gap, or missing behavior exists
+- **Impact:** Evidence establishes why it matters:
+    - volume alone is not impact
+- **Current state:** The problem is not already fixed or only historical
+- **Ownership:** The proposed repository and subsystem own the affected boundary
+- **Evidence strength:** The title, context, and goal do not exceed what the evidence proves
+- **No duplicate:** No existing issue already owns the same outcome
+- **Right artifact:** A new issue is better than an evidence comment, telemetry cleanup, configuration correction, existing issue update, or no action
 
 Do not recommend a new issue when the evidence shows only:
 - an already-fixed defect
@@ -55,7 +55,7 @@ Before asking the user:
 - Search titles and bodies in the proposed repository and in every repository that the evidence identifies as a plausible canonical or implementation owner
 - Read every issue, PR, document, or discussion before proposing it as related work
 - Distinguish current behavior from historical proposals, partial fixes, and stale evidence
-- Establish whether grouped telemetry represents unique incidents, wrappers, polling amplification, or heterogeneous causes
+- Establish whether grouped telemetry represents unique incidents, wrappers, polling amplification, or different kinds of causes
 
 Ask the user, one decision at a time, only when unresolved:
 - What outcome the issue should require
@@ -209,7 +209,7 @@ For a nontrivial issue or batch, independently review:
 - Related-work relevance
 - title and body consistency
 
-Show the revised exact draft before requesting mutation approval
+For revisions to an already-reviewed draft, follow [Draft Review and Feedback](../../rules/communication.md#draft-review-and-feedback) before requesting mutation approval
 
 ## Applying an Approved Change
 

@@ -90,7 +90,7 @@ When the user asks to improve agent configuration from session evidence:
   - reuse decisions the user has already confirmed
 - Compare each retained candidate with current configuration and classify it as already covered, conflicting, partially covered, or missing
 - Prefer aligning an existing canonical rule over adding a rule for each incident
-- Use `pi-config` for canonical placement, exact change proposals, approval, and verification
+- Use `editing-omp-config` for canonical placement, exact change proposals, approval, and verification
 
 ## Output
 

@@ -1,9 +1,14 @@
 ---
 alwaysApply: true
-agents: [main, task, slice-writer, sonic, sub, reviewer, "m[0-9]*"]
+agents: [main, task, sonic, sub, reviewer, "m[0-9]*"]
 ---
 
 # Coding
+
+## Tool use
+
+- Prefer Eval to batch `tool.*` calls and process results when you do not need to reason or ask for approval between calls
+- Use direct tools for simple one-off calls
 
 ## Coding implementation
 
@@ -35,10 +40,6 @@ You MUST:
   - update comments to reflect changed behavior, remove comments made obsolete by your change, and keep other comments unless the user approves removal
   - when adapting an existing implementation, compare reusing it with rewriting it. Consider the code we would maintain and the integration cost
   - review comments and documentation in the changed work for necessity, concision, and consistency with surrounding style
-
-## Testing and live verification
-
-For coverage selection and live proof, follow this section instead of the bundled feature/API default requiring a separate throwaway script or the UI default restricting new tests to broken suites. Retain the bundled permanent-test quality rules and worker-verification assignment
 
 ### Permanent coverage
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Static structural audit for native Excalidraw scenes.
 
-This catches machine-verifiable risks before visual review. It does not judge beauty
-and does not replace target-size, grayscale, or adversarial screenshot inspection.
+This reports machine-verifiable scene risks. It cannot establish semantic accuracy
+or rendered readability; inspect the final artifact at its intended size.
 """
 
 from __future__ import annotations
@@ -232,14 +232,6 @@ def _audit_scene_unchecked(scene: object, mode: Mode = "overview") -> AuditResul
     ]
     texts = [element for element in elements if element.get("type") == "text"]
     findings: list[Finding] = []
-    if mode == "technical":
-        findings.append(
-            Finding(
-                "warning",
-                "technical-visual-review-required",
-                "Static analysis cannot prove panel structure or local flow quality. Technical mode always requires target-scale and blind visual review.",
-            )
-        )
 
     x0, y0, x1, y1 = _bbox(elements)
     canvas_width = max(0.0, _finite_number(x1 - x0, "canvas.width"))
@@ -247,24 +239,6 @@ def _audit_scene_unchecked(scene: object, mode: Mode = "overview") -> AuditResul
     canvas_diagonal = _finite_number(
         math.hypot(canvas_width, canvas_height), "canvas.diagonal"
     )
-
-    if mode == "overview":
-        if len(nodes) > 9:
-            findings.append(
-                Finding(
-                    "error",
-                    "overview-node-budget",
-                    f"Overview has {len(nodes)} semantic nodes; default maximum is 9. Split or approve a detail view.",
-                )
-            )
-        if len(semantic_arrows) > 11:
-            findings.append(
-                Finding(
-                    "error",
-                    "overview-edge-budget",
-                    f"Overview has {len(semantic_arrows)} semantic arrows; default maximum is 11. Split or reduce routes.",
-                )
-            )
 
     background = scene.get("appState", {}).get("viewBackgroundColor", "#ffffff")
     if str(background).lower() != "#ffffff":
@@ -464,7 +438,7 @@ def _audit_scene_unchecked(scene: object, mode: Mode = "overview") -> AuditResul
             Finding(
                 "warning",
                 "excessive-accent-palette",
-                f"Overview uses {len(accent_colors)} accent stroke colors; the clean default maximum is 5.",
+                f"Overview uses {len(accent_colors)} accent stroke colors; the clean default is a restrained palette of about five accents. Check whether each additional color improves role recognition at target size.",
             )
         )
 

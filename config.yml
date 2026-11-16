@@ -5,14 +5,14 @@ modelRoles:
   web: openai-codex/gpt-6-luna:medium
   smol: openai-codex/gpt-6-luna:medium
   monitor: openai-codex/gpt-6-luna:low
-  default: anthropic/claude-opus-5-5:high
+  default: openai-codex/gpt-6-astra:low
 symbolPreset: unicode
 composer:
   shape: pi
   tokenRate: false
 theme:
   dark: gruvbox-pi
-setupVersion: 2
+setupVersion: 3
 statusLine:
   preset: custom
   transparent: true
@@ -32,12 +32,13 @@ statusLine:
     - cost
 colorBlindMode: false
 tui:
+  completeScrollback: true
   hyperlinks: auto
   reactions: false
   titleState: false
   titleSpinner: line
   tight: true
-  resizeScrollback: preserve
+  resizeScrollback: rebuild
   textSizing: false
 hideThinkingBlock: true
 model:
@@ -126,8 +127,6 @@ eval:
 recap:
   enabled: false
 providers:
-  openai-codex:
-    codeMode: "on"
   fetch: native
   cacheRetention: long
   openaiLiveSteering: false
@@ -141,8 +140,7 @@ extensions:
   - ~/.config/omp/agent/packages/pisesh
   - ~/.config/omp/agent/extensions/UI/compact-eval.ts
   - ~/.config/omp/agent/extensions/UI/sixel-submit-preview.ts
-disabledExtensions:
-  []
+disabledExtensions: []
 retry:
   modelFallback: false
   fallbackChains:
@@ -164,3 +162,9 @@ snapcompact:
 disabledProviders:
   - amazon-bedrock
 treeFilterMode: no-tools
+codexResets:
+  autoRedeem: "yes"
+input:
+  bareExitOnEmptySession: false
+ida:
+  enabled: false

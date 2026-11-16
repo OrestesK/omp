@@ -10,6 +10,8 @@ Use an existing site session in a short-lived HTTP client to perform an evidence
 ## Establish the request
 
 - Identify the target HTTPS origin, expected account or workspace, requested operation, and output destination
+- Before acquiring cookies or asking the user for access, MUST check whether a documented API or CLI can perform the requested read using existing authorized credentials
+    - If it provides the required evidence, MUST use that route instead
 - Establish the endpoint, method, request body, and expected response from site documentation, client code, or an observed request. Keep endpoint and token names site-specific
     - Classify the operation by its effects, not its HTTP verb. A download may use POST
     - If the request or its effects cannot be established, stop rather than guessing
@@ -39,6 +41,7 @@ Use an existing site session in a short-lived HTTP client to perform an evidence
 
 ## Check and report the outcome
 
+- If browser access fails, MUST name the blocked browser-dependent check without marking independently available API or CLI checks as blocked
 - For site data, verify that the response contains the requested data rather than a login page or unrelated success response
 - For a download or export, verify the received content is the expected file, not HTML for a login or error page, before reporting a completed download
 - For network-backed app inspection, inspect the actual requested definitions or data. A listing or metadata-only response does not prove their contents

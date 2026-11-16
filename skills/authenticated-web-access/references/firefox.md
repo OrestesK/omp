@@ -11,9 +11,9 @@ Use this reference when the core authenticated-web-access workflow calls for an 
 
 ## Open the cookie database
 
-- Before **any** opening of `cookies.sqlite`, including for metadata queries, disclose that SQLite read-only access to a live profile can create or update WAL coordination sidecars and obtain approval for that access
+- SQLite read-only access to a live profile can create or update WAL coordination sidecars
     - If the profile must remain unchanged, use an available read-only filesystem view exposing the database and its existing WAL sidecars, or stop if no consistent read is possible
-- After approval, open the selected database in SQLite read-only mode and read its current transactional state, including the WAL when present
+- Open the selected database in SQLite read-only mode and read its current transactional state, including the WAL when present
     - Do not use `immutable=1` against an active Firefox database or copy only its main file. Either can miss committed cookies in the WAL
 
 ## Select and hand off cookies
@@ -23,6 +23,6 @@ Use this reference when the core authenticated-web-access workflow calls for an 
 - Keep the selected container and partition contexts distinct through `originAttributes`
     - Preserve host and path as well. Do not collapse cookies into a dictionary keyed only by name
 - Establish the required cookie names and any CSRF cookie/header relationship from this metadata and the core workflow's site-specific request evidence before reading values
-- Read only those selected cookie values inside the process that will make the HTTP request, using the same approved read-only access method
+- Read only those selected cookie values inside the process that will make the HTTP request, using the same read-only access method
     - Apply the selected host/domain, path, expiry, HTTPS, and `originAttributes` constraints
 - Hand the selected context and cookies directly in memory to the requesting client

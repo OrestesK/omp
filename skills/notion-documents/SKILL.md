@@ -39,7 +39,7 @@ Fictional proposal; the labels illustrate relationships, not a required set of f
 
 **Before**
 
-s Procurement proposes budget-owner approval followed by director approval for purchases of $10,000 or more. Which purchases, if any, are exempt remains undecided. Director routing is supported, but the group mapping has not been verified
+Procurement proposes budget-owner approval followed by director approval for purchases of $10,000 or more. Which purchases, if any, are exempt remains undecided. Director routing is supported, but the group mapping has not been verified
 
 **After**
 
