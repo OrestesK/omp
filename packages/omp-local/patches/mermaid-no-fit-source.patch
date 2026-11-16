@@ -1,0 +1,228 @@
+--- a/packages/tui/src/theme/mermaid-cache.ts
++++ b/packages/tui/src/theme/mermaid-cache.ts
+@@ -11,8 +11,8 @@
+ 	/**
+ 	 * Maximum display width (terminal columns) the diagram should occupy.
+ 	 * Flowcharts are also rendered top-down and left-to-right. A resize picks
+-	 * the shortest variant that fits; if none fit, the narrowest, which the
+-	 * caller may still clip. Omit to keep the source's own layout.
++	 * the shortest variant that fits; if none fit, return null so the caller
++	 * can show the Mermaid source. Omit to keep the source's own layout.
+ 	 */
+ 	maxWidth?: number;
+ }
+@@ -98,7 +98,8 @@
+ 
+ /**
+  * Resolve mermaid ASCII from fenced block source text.
+- * Returns null when rendering fails, while memoizing failures to avoid repeated work.
++ * Returns null when rendering fails or no variant fits the supplied width;
++ * render failures are memoized to avoid repeated work.
+  */
+ export function resolveMermaidAscii(source: string, options?: MermaidResolveOptions): string | null {
+ 	const normalizedSource = source.replace(/\r\n?/g, "\n").trim();
+@@ -123,31 +124,19 @@
+ 	}
+ 
+ 	const fitting = candidates.filter(candidate => candidate.width <= maxWidth);
+-	const pool = fitting.length > 0 ? fitting : candidates;
+-	let best = pool[0]!;
+-	for (let i = 1; i < pool.length; i++) {
+-		const next = pool[i]!;
+-		if (fitting.length > 0) {
+-			if (next.height !== best.height) {
+-				if (next.height < best.height) best = next;
+-				continue;
+-			}
+-			if (next.authored !== best.authored) {
+-				if (next.authored) best = next;
+-				continue;
+-			}
+-			if (next.width < best.width) best = next;
+-			continue;
+-		}
+-		if (next.width !== best.width) {
+-			if (next.width < best.width) best = next;
+-			continue;
+-		}
++	if (fitting.length === 0) return null;
++	let best = fitting[0]!;
++	for (let i = 1; i < fitting.length; i++) {
++		const next = fitting[i]!;
+ 		if (next.height !== best.height) {
+ 			if (next.height < best.height) best = next;
+ 			continue;
+ 		}
+-		if (next.authored) best = next;
++		if (next.authored !== best.authored) {
++			if (next.authored) best = next;
++			continue;
++		}
++		if (next.width < best.width) best = next;
+ 	}
+ 	return best.ascii;
+ }
+--- a/packages/tui/src/chat/fence-figure.ts
++++ b/packages/tui/src/chat/fence-figure.ts
+@@ -3,8 +3,8 @@
+  * Markdown draws that fence: ```svg as an inline image ({@link SvgFigure}),
+  * redrawn as the body streams; ```mermaid as ASCII art once the body is
+  * final. The card already shows the source, so unlike the assistant's fence
+- * it never falls back to code: {@link FenceFigure.draws} turns down fences
+- * this terminal shows as code, and an svg that does not rasterize stays blank.
++ * it never falls back to code: unsupported or no-fit Mermaid diagrams draw
++ * no rows, and an svg that does not rasterize stays blank.
+  */
+ import type { ImageBudget } from "../components/image";
+ import { fencedCode, Markdown } from "../components/markdown";
+@@ -12,6 +12,7 @@
+ import { getMarkdownTheme } from "../theme";
+ import type { ToolFigure } from "../tools/renderer";
+ import type { Component } from "../tui";
++import { getPaddingX } from "../utils";
+ import { SvgFigure, svgFigureRendering } from "./svg-figure";
+ 
+ /** Fence languages a {@link FenceFigure} draws. */
+@@ -26,9 +27,9 @@
+ 
+ export class FenceFigure implements Component {
+ 	/**
+-	 * Whether this terminal draws `figure` now: an svg where inline images show
+-	 * (`showImages` and a graphics protocol), a closed mermaid fence when
+-	 * diagram rendering is on and the source renders.
++	 * Width-independent eligibility: svg with `showImages`, an image protocol,
++	 * and SVG rendering enabled; or closed Mermaid with diagram rendering on
++	 * and renderable source. `render(width)` checks Mermaid fit separately.
+ 	 */
+ 	static draws(
+ 		figure: ToolFigure,
+@@ -65,7 +66,11 @@
+ 	/** The drawing; no rows while an svg draws, or when it does not. */
+ 	render(width: number): readonly string[] {
+ 		if (this.#svg) return this.#svg.render(width);
+-		this.#diagram ??= new Markdown(fencedCode("mermaid", this.#source), 1, 0, getMarkdownTheme());
++		const theme = getMarkdownTheme();
++		// The card already shows source; don't draw Markdown's code fallback when no diagram fits.
++		const contentWidth = Math.max(1, width - getPaddingX(1) * 2);
++		if (theme.resolveMermaidAscii?.(this.#source.trimEnd(), contentWidth) == null) return [];
++		this.#diagram ??= new Markdown(fencedCode("mermaid", this.#source), 1, 0, theme);
+ 		return this.#diagram.render(width);
+ 	}
+ 
+--- a/packages/tui/test/mermaid-cache.test.ts
++++ b/packages/tui/test/mermaid-cache.test.ts
+@@ -43,8 +43,8 @@
+ 		expect(renders).toHaveLength(3);
+ 	});
+ 
+-	it("uses the narrowest layout only when nothing fits", () => {
+-		expect(resolveMermaidAscii("wide-authored", { maxWidth: 1 })).toBe("td\ntd\ntd");
++	it("returns null when no layout fits", () => {
++		expect(resolveMermaidAscii("wide-authored", { maxWidth: 1 })).toBeNull();
+ 	});
+ 
+ 	it("measures themed ASCII without counting ANSI", () => {
+@@ -67,7 +67,7 @@
+ 		for (const source of sources) {
+ 			renders.length = 0;
+ 			clearMermaidCache();
+-			expect(resolveMermaidAscii(source, { maxWidth: 4 })).toBe("direction-ignored-and-wide");
++			expect(resolveMermaidAscii(source, { maxWidth: 4 })).toBeNull();
+ 			expect(renders).toEqual([`${source}:authored`]);
+ 		}
+ 	});
+--- a/packages/tui/test/write-figure.test.ts
++++ b/packages/tui/test/write-figure.test.ts
+@@ -1,8 +1,13 @@
+ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
++import * as fs from "node:fs";
++import { stripVTControlCharacters } from "node:util";
+ import { ToolExecutionComponent } from "@oh-my-pi/pi-tui/chat/tool-execution";
+ import { ImageBudget } from "@oh-my-pi/pi-tui/components/image";
++import { Markdown } from "@oh-my-pi/pi-tui/components/markdown";
+ import { ImageProtocol, setTerminalImageProtocol, TERMINAL } from "@oh-my-pi/pi-tui/terminal-capabilities";
+ import { initTheme } from "@oh-my-pi/pi-tui/theme";
++import { clearMermaidCache } from "@oh-my-pi/pi-tui/theme/mermaid-cache";
++import { getMarkdownTheme } from "@oh-my-pi/pi-tui/theme/tui-adapters";
+ import { writeToolRenderer } from "@oh-my-pi/pi-tui/tools/write";
+ 
+ const originalImageProtocol = TERMINAL.imageProtocol;
+@@ -90,6 +95,30 @@
+ 		expect(plain(broken.component.render(80)).match(/not a diagram/g)).toHaveLength(1);
+ 	});
+ 
++	it("resizes Mermaid ASCII in assistant Markdown and completed write without duplicating no-fit source", () => {
++		const source = fs.readFileSync(new URL("./fixtures/original-mermaid.mmd", import.meta.url), "utf8").trimEnd();
++		const wideDiagram = fs.readFileSync(
++			new URL("./fixtures/original-mermaid-wide-120.txt", import.meta.url),
++			"utf8",
++		).trimEnd().split("\n");
++		const reply = new Markdown(`\`\`\`mermaid\n${source}\n\`\`\``, 1, 0, getMarkdownTheme(), undefined, 0);
++		const replyRows = (width: number) =>
++			reply.render(width).map(row => stripVTControlCharacters(row).trimEnd());
++		const fencedSource = [" \`\`\`mermaid", ...source.split("\n"), " \`\`\`"];
++		const write = streamingWrite("flow.mmd", `${source}\n`);
++		write.finish(`${source}\n`);
++
++		clearMermaidCache();
++		expect(replyRows(80)).toEqual(fencedSource);
++		expect(plain(write.component.render(80)).match(/Requested this export\?/g)).toHaveLength(1);
++		expect(replyRows(120)).toEqual(wideDiagram.map(line => ` ${line}`));
++		const wideWrite = plain(write.component.render(120));
++		expect(wideWrite).toContain(wideDiagram[0]!);
++		expect(wideWrite.match(/Requested this export\?/g)).toHaveLength(2);
++		expect(replyRows(80)).toEqual(fencedSource);
++		expect(plain(write.component.render(80)).match(/Requested this export\?/g)).toHaveLength(1);
++	});
++
+ 	it("leads a native figure write with its fence: open and streaming until the content is final", () => {
+ 		const fence = (view: { body?: readonly unknown[] } | undefined) =>
+ 			view?.body?.find(child => typeof child === "object" && child !== null && "k" in child && child.k === "md");
+--- /dev/null
++++ b/packages/tui/test/fixtures/original-mermaid.mmd
+@@ -0,0 +1,11 @@
++flowchart LR
++    subgraph Today
++        A[Download request] --> B{Requested this export?}
++        B -->|Yes| C[Serve saved file]
++        B -->|No| D[Deny]
++    end
++    subgraph Proposed
++        E[Download request] --> F{Has report access now?}
++        F -->|Yes| G[Serve saved file]
++        F -->|No| H[Deny]
++    end
+--- /dev/null
++++ b/packages/tui/test/fixtures/original-mermaid-wide-120.txt
+@@ -0,0 +1,31 @@
++┌─────────────────────────────────────────┐ ┌─────────────────────────────────────────┐
++│                  Today                  │ │                Proposed                 │
++│                                         │ │                                         │
++│                                         │ │                                         │
++│ ┌────────────────────────┐              │ │ ┌────────────────────────┐              │
++│ │                        │              │ │ │                        │              │
++│ │    Download request    │              │ │ │    Download request    │              │
++│ │                        │              │ │ │                        │              │
++│ └────────────┬───────────┘              │ │ └────────────┬───────────┘              │
++│              │                          │ │              │                          │
++│              │                          │ │              │                          │
++│              │                          │ │              │                          │
++│              │                          │ │              │                          │
++│              ▼                          │ │              ▼                          │
++│ ◇────────────────────────◇              │ │ ◇────────────────────────◇              │
++│ │                        │              │ │ │                        │              │
++│ │ Requested this export? ├─────────┐    │ │ │ Has report access now? ├─────────┐    │
++│ │                        │         │    │ │ │                        │         │    │
++│ ◇────────────┬───────────◇        No    │ │ ◇────────────┬───────────◇        No    │
++│              │                     │    │ │              │                     │    │
++│             Yes                    │    │ │             Yes                    │    │
++│              │                     │    │ │              │                     │    │
++│              │                     │    │ │              │                     │    │
++│              ▼                     ▼    │ │              ▼                     ▼    │
++│ ┌────────────────────────┐     ┌──────┐ │ │ ┌────────────────────────┐     ┌──────┐ │
++│ │                        │     │      │ │ │ │                        │     │      │ │
++│ │    Serve saved file    │     │ Deny │ │ │ │    Serve saved file    │     │ Deny │ │
++│ │                        │     │      │ │ │ │                        │     │      │ │
++│ └────────────────────────┘     └──────┘ │ │ └────────────────────────┘     └──────┘ │
++│                                         │ │                                         │
++└─────────────────────────────────────────┘ └─────────────────────────────────────────┘

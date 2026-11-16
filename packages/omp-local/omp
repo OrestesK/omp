@@ -1,0 +1,16 @@
+#!/bin/sh
+if [ "$1" = update ]; then
+	shift
+	launcher=$(readlink -f -- "$0")
+	exec bun "$(dirname -- "$launcher")/update.ts" "$@"
+fi
+data="$HOME/.local/share/omp-local"
+mkdir -p -- "$data/release-locks" || exit 1
+exec 8>"$data/.retention.lock"
+flock -s 8 || exit 1
+release=$(readlink -e -- "$data/current") || exit 1
+exec 9>"$data/release-locks/$(basename -- "$release").lock"
+flock -s 9 || exit 1
+flock -u 8 || exit 1
+exec 8>&-
+exec bun "$release/packages/coding-agent/dist/cli.js" "$@"

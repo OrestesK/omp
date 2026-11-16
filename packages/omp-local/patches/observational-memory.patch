@@ -1,0 +1,995 @@
+diff --git a/packages/coding-agent/src/extensibility/extensions/loader.ts b/packages/coding-agent/src/extensibility/extensions/loader.ts
+index 525ccaf2ce..db2abe631d 100644
+--- a/packages/coding-agent/src/extensibility/extensions/loader.ts
++++ b/packages/coding-agent/src/extensibility/extensions/loader.ts
+@@ -28,6 +28,7 @@ import { execCommand } from "../../exec/exec";
+ import { getCodingAgentApi } from "../host-api";
+ import type { SendUserMessageOptions } from "../../session/agent-session";
+ import type { CustomMessagePayload } from "../../session/messages";
++import type { SessionEntry } from "../../session/session-entries";
+ import type { FileDeleteFallbackHandler, FileWriteFallbackHandler } from "../../tools/file-write-fallback";
+ import { isFilesystemSourcePath } from "../../tools/path-utils";
+ import { InternalUrlRouter } from "../../internal-urls/router";
+@@ -307,6 +308,9 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
+ 	registerAssistantThinkingRenderer(renderer: AssistantThinkingRenderer): void {
+ 		this.extension.assistantThinkingRenderers.push(renderer);
+ 	}
++	registerCompactionSnapshot(callback: (branchEntries: readonly SessionEntry[], ctx: ExtensionContext) => string): void {
++		this.extension.compactionSnapshot = callback;
++	}
+ 
+ 	registerAssistantTextRenderer(renderer: AssistantTextRenderer): void {
+ 		if (typeof renderer !== "function") {
+diff --git a/packages/coding-agent/src/extensibility/extensions/runner.ts b/packages/coding-agent/src/extensibility/extensions/runner.ts
+index dfbbacd52a..911a715d64 100644
+--- a/packages/coding-agent/src/extensibility/extensions/runner.ts
++++ b/packages/coding-agent/src/extensibility/extensions/runner.ts
+@@ -39,6 +39,7 @@ import { type Theme, theme } from "@oh-my-pi/pi-tui/theme";
+ import type { AsyncJobSnapshot, SendUserMessageOptions } from "../../session/agent-session";
+ import { MAIN_AGENT_ID } from "../../registry/agent-registry";
+ import type { SessionManager } from "../../session/session-manager";
++import type { SessionEntry } from "../../session/session-entries";
+ import { addFileDeleteFallback, addFileWriteFallback } from "../../tools/file-write-fallback";
+ import type { BranchHandler, NavigateTreeHandler, NewSessionHandler } from "../session-handler-types";
+ import { accumulateToolCallResult, buildAggregatedToolCallResult } from "../shared-events";
+@@ -1225,6 +1226,25 @@ export class ExtensionRunner {
+ 		return this.extensions.map(e => e.path);
+ 	}
+ 
++	/** Paths currently participating in context reconstruction. */
++	getActiveExtensionPaths(): ReadonlySet<string> {
++		return new Set(this.getExtensionPaths());
++	}
++
++	/** Purely evaluate active callbacks; a rejected candidate discards these values. */
++	captureCompactionSnapshots(branchEntries: readonly SessionEntry[]): Record<string, string> | undefined {
++		let snapshots: Record<string, string> | undefined;
++		let ctx: ExtensionContext | undefined;
++		for (const extension of this.extensions) {
++			if (!extension.compactionSnapshot) continue;
++			(snapshots ??= Object.create(null) as Record<string, string>)[extension.path] = extension.compactionSnapshot(
++				branchEntries,
++				(ctx ??= this.createContext()),
++			);
++		}
++		return snapshots;
++	}
++
+ 	/** Every extension this runner loaded, in load order, including suspended ones. */
+ 	getLoadedExtensions(): readonly Extension[] {
+ 		return this.#loadOrder ?? this.extensions;
+diff --git a/packages/coding-agent/src/extensibility/extensions/types.ts b/packages/coding-agent/src/extensibility/extensions/types.ts
+index 2bf2b074d5..513949b035 100644
+--- a/packages/coding-agent/src/extensibility/extensions/types.ts
++++ b/packages/coding-agent/src/extensibility/extensions/types.ts
+@@ -101,6 +101,7 @@ import type { EphemeralTurnOptions, EphemeralTurnResult } from "../../session/ag
+ import type { CompactMode } from "../../session/compact-modes";
+ import type { CustomMessagePayload } from "../../session/messages";
+ import type { ReadonlySessionManager, SessionManager } from "../../session/session-manager";
++import type { SessionEntry } from "../../session/session-entries";
+ import type { BashToolInput, GlobToolInput, GrepToolInput, ReadToolInput, WriteToolInput } from "../../tools";
+ import type { GlobToolDetails } from "@oh-my-pi/pi-tui/tools/glob";
+ import type { GrepToolDetails } from "@oh-my-pi/pi-tui/tools/grep";
+@@ -1942,6 +1943,9 @@ export interface ExtensionAPI {
+ 	on(event: "mcp_notification", handler: ExtensionHandler<McpNotificationEvent>): void;
+ 	on(event: "link_activate", handler: ExtensionHandler<LinkActivateEvent>): void;
+ 
++	/** Synchronously evaluate at a remote/handoff commit attempt; only accepted compactions persist the result. */
++	registerCompactionSnapshot(callback: (branchEntries: readonly SessionEntry[], ctx: ExtensionContext) => string): void;
++
+ 	// =========================================================================
+ 	// Tool Registration
+ 	// =========================================================================
+@@ -2491,6 +2495,7 @@ export interface Extension {
+ 	tools: Map<string, RegisteredTool<any, any>>;
+ 	toolRegistrationListeners?: Set<ToolRegistrationListener>;
+ 	assistantThinkingRenderers: AssistantThinkingRenderer[];
++	compactionSnapshot?: (branchEntries: readonly SessionEntry[], ctx: ExtensionContext) => string;
+ 	assistantTextRenderers: AssistantTextRenderer[];
+ 	/** Presenters registered with `registerTranscriptPresenter`, in registration order. */
+ 	transcriptPresenters: TranscriptPresenter[];
+diff --git a/packages/coding-agent/src/sdk.ts b/packages/coding-agent/src/sdk.ts
+index a5045325d4..1bbf307564 100644
+--- a/packages/coding-agent/src/sdk.ts
++++ b/packages/coding-agent/src/sdk.ts
+@@ -41,7 +41,7 @@ import * as postmortem from "@oh-my-pi/pi-utils/postmortem";
+ import * as prompt from "@oh-my-pi/pi-utils/prompt";
+ import { Snowflake } from "@oh-my-pi/pi-utils/snowflake";
+ import { INTENT_FIELD } from "@oh-my-pi/pi-wire";
+-import { DEFAULT_FRAME_DATA_BYTES_BUDGET, frameDataBytesBudget } from "@oh-my-pi/snapcompact";
++import { frameDataBytesBudget } from "@oh-my-pi/snapcompact";
+ import {
+ 	discoverAdvisorConfigs,
+ 	discoverWatchdogFiles,
+@@ -4986,19 +4986,17 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 
+ 		// Restore messages if session has existing data
+ 		if (hasExistingSession) {
+-			// The restore above built its context before the session model was known: at the default frame
+-			// payload budget, standing on the newest compaction. Rebuild only when that model sizes the archive
+-			// differently or cannot replay that compaction.
++			// Rebuild after extension discovery and model resolution to project active snapshots
++			// on the latest compaction readable by this model at its frame payload budget.
+ 			const frameBudget = frameDataBytesBudget(model);
+-			const branch = sessionManager.getBranch();
+-			const restored =
+-				frameBudget === DEFAULT_FRAME_DATA_BYTES_BUDGET &&
+-				getReadableCompactionEntry(branch, model) === getReadableCompactionEntry(branch, undefined)
+-					? existingSession
+-					: deobfuscateSessionContext(
+-							sessionManager.buildSessionContext({ maxFrameDataBytes: frameBudget, model }),
+-							obfuscator,
+-						);
++			const restored = deobfuscateSessionContext(
++				sessionManager.buildSessionContext({
++					activeExtensionPaths: extensionRunner.getActiveExtensionPaths(),
++					maxFrameDataBytes: frameBudget,
++					model,
++				}),
++				obfuscator,
++			);
+ 			agent.replaceMessages(restored.messages);
+ 			// Only an explicit role alias re-owns a resumed branch; any other explicit model
+ 			// (subagent revival, SDK callers) keeps the role its history recorded.
+@@ -5457,6 +5455,18 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				const { suspended, resumed } = extensionRunner.setSuspendedExtensions(
+ 					extension => governed.has(extension.resolvedPath) && !enabled.has(extension.resolvedPath),
+ 				);
++				if (suspended.length > 0 || resumed.length > 0) {
++					const snapshots = getReadableCompactionEntry(sessionManager.getBranch(), session.model)?.extensionSnapshots;
++					if (
++						agent.state.messages[0]?.role === "compactionSummary" &&
++						snapshots &&
++						[...suspended, ...resumed].some(extension => Object.hasOwn(snapshots, extension.path))
++					) {
++						// Rebuild only after an in-flight turn settles; never replace its live messages.
++						await session.waitForPromptIdle();
++						agent.replaceMessages(session.buildDisplaySessionContext().messages);
++					}
++				}
+ 				const loadedPaths = new Set(extensionRunner.getLoadedExtensions().map(extension => extension.resolvedPath));
+ 				const unloaded = [...enabled].filter(
+ 					extensionPath => !loadedPaths.has(extensionPath) && !announcedUnloadedExtensions.has(extensionPath),
+@@ -5942,6 +5952,10 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
+ 				forwardedPreparedExtensions.push(...(loaded.preparedExtensions ?? []));
+ 				extensionPaths.push(...loaded.extensions.map(extension => extension.resolvedPath));
+ 				await extensionRunner.addExtensions(loaded.extensions);
++				const snapshots = getReadableCompactionEntry(sessionManager.getBranchView(), session.model)?.extensionSnapshots;
++				if (snapshots && loaded.extensions.some(extension => Object.hasOwn(snapshots, extension.path))) {
++					agent.replaceMessages(session.buildDisplaySessionContext().messages);
++				}
+ 			});
+ 		}
+ 		startDeferredMCPDiscovery?.(session);
+diff --git a/packages/coding-agent/src/session/agent-session.ts b/packages/coding-agent/src/session/agent-session.ts
+index 2319298857..9234e4ee3b 100644
+--- a/packages/coding-agent/src/session/agent-session.ts
++++ b/packages/coding-agent/src/session/agent-session.ts
+@@ -1359,6 +1359,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 	readonly #streamingEditGuard: StreamingEditGuard;
+ 	readonly #loopGuards: LoopGuards;
+ 	#promptInFlightCount = 0;
++	#promptInFlightSettled: PromiseWithResolvers<void> | undefined;
+ 	/**
+ 	 * Brackets owned by a client-submitted prompt (`#prompt`) only: claimed
+ 	 * synchronously at submission, before any dispatch preprocessing await, and
+@@ -1535,6 +1536,8 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 		// finishing has its bracket reset by it and ends here.
+ 		if (epoch === this.#inFlightEpoch) this.#promptInFlightCount = Math.max(0, this.#promptInFlightCount - 1);
+ 		if (this.#promptInFlightCount !== 0) return;
++		this.#promptInFlightSettled?.resolve();
++		this.#promptInFlightSettled = undefined;
+ 		this.yieldQueue.requestIdleFlush();
+ 		this.#releasePowerAssertion();
+ 		this.#endComputerTurn();
+@@ -2043,6 +2046,8 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 		this.#inFlightEpoch++;
+ 		this.#promptInFlightCount = 0;
+ 		this.#clientPromptInFlightCount = 0;
++		this.#promptInFlightSettled?.resolve();
++		this.#promptInFlightSettled = undefined;
+ 		this.yieldQueue.requestIdleFlush();
+ 		this.#releasePowerAssertion();
+ 		this.#endComputerTurn();
+@@ -2716,6 +2721,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 			model: () => this.model,
+ 			sessionId: () => this.sessionId,
+ 			costGate: () => this.#costGate,
++			activeExtensionPaths: () => this.#extensionRunner?.getActiveExtensionPaths(),
+ 			localProtocolOptions: () => this.#localProtocolOptions(),
+ 			transformContext: (messages, signal) => this.#transformContext(messages, signal),
+ 			convertToLlm: messages => this.#convertToLlm(messages),
+@@ -7294,6 +7300,19 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 		return this.agent.isAborting;
+ 	}
+ 
++	/** Wait through admitted setup and the full prompt run before rebuilding agent history. */
++	async waitForPromptIdle(): Promise<void> {
++		while (true) {
++			await this.waitForAdmittedSubmissions();
++			if (this.#promptInFlightCount > 0) {
++				this.#promptInFlightSettled ??= Promise.withResolvers<void>();
++				await this.#promptInFlightSettled.promise;
++			}
++			await this.waitForIdle();
++			if (!this.hasAdmittedSubmission && !this.isStreaming) return;
++		}
++	}
++
+ 	/**
+ 	 * Wait until streaming, event persistence, and deferred recovery work are fully settled.
+ 	 * Call outside callbacks whose completion the session awaits to avoid waiting on yourself.
+@@ -14986,6 +15005,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 
+ 		// Update agent state — build display context to populate agent messages.
+ 		const stateContext = this.sessionManager.buildSessionContext({
++			activeExtensionPaths: this.#extensionRunner?.getActiveExtensionPaths(),
+ 			maxFrameDataBytes: frameDataBytesBudget(this.model),
+ 			model: this.model,
+ 		});
+@@ -15019,6 +15039,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
+ 				fromExtension: summaryText ? fromExtension : undefined,
+ 			});
+ 			const rawContext = this.sessionManager.buildSessionContext({
++				activeExtensionPaths: this.#extensionRunner?.getActiveExtensionPaths(),
+ 				maxFrameDataBytes: frameDataBytesBudget(this.model),
+ 				model: this.model,
+ 			});
+diff --git a/packages/coding-agent/src/session/session-context.ts b/packages/coding-agent/src/session/session-context.ts
+index eab9fcb09f..d5476edd25 100644
+--- a/packages/coding-agent/src/session/session-context.ts
++++ b/packages/coding-agent/src/session/session-context.ts
+@@ -33,6 +33,10 @@ import {
+ 	type SessionMessageEntry,
+ } from "./session-entries";
+ 
++// These identities exist only in rebuilt live context; no marker is journaled or sent to a provider.
++const frozenExtensionObservations = new WeakSet<AgentMessage>();
++const projectedCodexObservationCounts = new WeakMap<OpenAIResponsesHistoryPayload, number>();
++
+ // #4470 crash artifacts had legacy frames (no shape metadata) with 17 frames,
+ // ~306k archive chars, and ~1.5M truncated chars. Current snapcompact frames
+ // carry shape metadata; only legacy archives with frame payload risk get this
+@@ -184,6 +188,8 @@ export interface BuildSessionContextOptions {
+ 	/** Archive frame bytes the LLM context attaches: the active model's {@link snapcompact.frameDataBytesBudget}
+ 	 *  (unset: {@link snapcompact.DEFAULT_FRAME_DATA_BYTES_BUDGET}). */
+ 	maxFrameDataBytes?: number;
++	/** Extension paths currently active in this session (suspended extensions are excluded). */
++	activeExtensionPaths?: ReadonlySet<string>;
+ 	/**
+ 	 * The model that reads this context. A compaction whose provider-native
+ 	 * payload it cannot replay summarizes nothing for it (the stored summary is a
+@@ -242,6 +248,25 @@ export function getOpenAiRemoteCompactionPayload(
+ 		items: candidate.replacementHistory,
+ 	};
+ }
++/** Remove only frozen live projections from a handoff side request, retaining real conversation turns. */
++export function handoffHistoryWithoutFrozenExtensionSnapshots(messages: AgentMessage[]): AgentMessage[] {
++	const history: AgentMessage[] = [];
++	for (const message of messages) {
++		if (frozenExtensionObservations.has(message)) continue;
++		if (message.role === "compactionSummary" && message.providerPayload?.type === "openaiResponsesHistory") {
++			const payload = message.providerPayload;
++			const observationCount = projectedCodexObservationCounts.get(payload);
++			if (observationCount !== undefined) {
++				const items: Array<Record<string, unknown>> = [payload.items[0]!];
++				for (let i = observationCount + 1; i < payload.items.length; i++) items.push(payload.items[i]);
++				history.push({ ...message, providerPayload: { ...payload, items } });
++				continue;
++			}
++		}
++		history.push(message);
++	}
++	return history;
++}
+ 
+ /** Session entries that replay as transcript messages: persisted messages and custom messages. */
+ export type TranscriptEntry = SessionMessageEntry | CustomMessageEntry;
+@@ -391,10 +416,12 @@ export function buildSessionContext(
+ 
+ 	// Build messages and collect corresponding entries
+ 	// When there's a compaction, we need to:
+-	// 1. Emit summary first (entry = compaction)
+-	// 2. Emit kept messages (from firstKeptEntryId up to compaction)
++	// 1. Emit summary, then frozen observations unless signed Anthropic tail needs its original prefix
++	// 2. Emit kept messages (from firstKeptEntryId up to compaction), then deferred observations
+ 	// 3. Emit messages after compaction
+ 	const messages: AgentMessage[] = [];
++	let frozenObservationCount = 0;
++	let deferredObservationEndIndex = 0;
+ 	const cacheMissExplainedAt: boolean[] = [];
+ 	let pendingReset = false;
+ 	let currentMode = "none";
+@@ -538,10 +565,41 @@ export function buildSessionContext(
+ 	} else if (compaction) {
+ 		const remotePayload = getOpenAiRemoteCompactionPayload(compaction);
+ 		const remoteReplacementHistory = remotePayload?.items;
++		let observationTexts: string[] | undefined;
++		if (
++			!options?.transcript &&
++			(compaction.method === "remote" || compaction.method === "handoff") &&
++			compaction.extensionSnapshots &&
++			options?.activeExtensionPaths
++		) {
++			for (const path of options.activeExtensionPaths) {
++				const text = compaction.extensionSnapshots[path];
++				if (text) (observationTexts ??= []).push(text);
++			}
++		}
++		// Codex V2 stores retained items before its opaque compaction item. Clone
++		// only the request payload: opaque item, frozen user observations, then
++		// every original retained item. The persisted ciphertext stays untouched.
++		const nativeCodexCompaction =
++			observationTexts && remotePayload?.provider === "openai-codex"
++				? remotePayload.items.find(item => item.type === "compaction" && typeof item.encrypted_content === "string")
++				: undefined;
+ 		// Anthropic server compaction persists a plain-text summary plus its
+ 		// native replay; the kept tail still comes from entries below.
+ 		const anthropicPayload = getAnthropicCompactionPayload(compaction.preserveData);
+-		const providerPayload = remotePayload ?? anthropicPayload;
++		let providerPayload = remotePayload ?? anthropicPayload;
++		if (nativeCodexCompaction && observationTexts && remotePayload) {
++			const items: Array<Record<string, unknown>> = [nativeCodexCompaction];
++			for (const text of observationTexts) {
++				items.push({ type: "message", role: "user", content: [{ type: "input_text", text }] });
++			}
++			for (const item of remotePayload.items) {
++				if (item !== nativeCodexCompaction) items.push(item);
++			}
++			const projectedPayload: OpenAIResponsesHistoryPayload = { ...remotePayload, items };
++			projectedCodexObservationCounts.set(projectedPayload, observationTexts.length);
++			providerPayload = projectedPayload;
++		}
+ 
+ 		// Find compaction index in path
+ 		const compactionIdx = path.findIndex(e => e.type === "compaction" && e.id === compaction.id);
+@@ -552,28 +610,44 @@ export function buildSessionContext(
+ 		// marker before the first retained entry instead (other lanes use the
+ 		// commit timestamp). The summary itself keeps the commit timestamp, which
+ 		// still retires the tail's pre-compaction usage reports.
+-		let historyRewriteAt: number | undefined;
+-		if (anthropicPayload !== undefined) {
+-			const firstKeptIdx = path.findIndex(entry => entry.id === compaction.firstKeptEntryId);
++		let retainedStart = -1;
++		if (anthropicPayload || !remoteReplacementHistory || options?.transcript) {
++			const firstKeptIdx = path.findIndex(
++				(entry, index) => index < compactionIdx && entry.id === compaction.firstKeptEntryId,
++			);
+ 			const snapshotIdx =
+-				compaction.firstKeptEntryId === "" && compaction.providerReplayThroughEntryId
++				anthropicPayload && compaction.firstKeptEntryId === "" && compaction.providerReplayThroughEntryId
+ 					? path.findIndex(entry => entry.id === compaction.providerReplayThroughEntryId)
+ 					: -1;
+-			const firstRetained =
+-				(firstKeptIdx >= 0 && firstKeptIdx < compactionIdx ? path[firstKeptIdx] : undefined) ??
+-				(snapshotIdx >= 0 && snapshotIdx < compactionIdx - 1 ? path[snapshotIdx + 1] : undefined) ??
+-				path[compactionIdx + 1];
+-			// The message's own time, not the entry's: an assistant message is
+-			// stamped when its stream starts and saved after it ends, so a marker
+-			// derived from the entry would postdate that turn and strip its thinking.
+-			// Summaries without `exactTail` keep the entry time: thinking created
+-			// after them was signed against requests that stripped that turn's.
++			retainedStart =
++				firstKeptIdx >= 0 ? firstKeptIdx : snapshotIdx >= 0 && snapshotIdx < compactionIdx - 1 ? snapshotIdx + 1 : -1;
++		}
++		let deferAnthropicObservation = false;
++		let historyRewriteAt: number | undefined;
++		if (anthropicPayload !== undefined) {
++			const firstRetained = retainedStart >= 0 ? path[retainedStart] : path[compactionIdx + 1];
++			// An exact retained prefix can include signed assistant turns whose
++			// message timestamps predate their journal timestamps.
+ 			if (firstRetained?.type === "message" && anthropicPayload.exactTail) {
+ 				historyRewriteAt = firstRetained.message.timestamp - 1;
+ 			} else if (firstRetained) {
+ 				const retainedAt = new Date(firstRetained.timestamp).getTime();
+ 				if (Number.isFinite(retainedAt)) historyRewriteAt = retainedAt - 1;
+ 			}
++			for (let i = retainedStart; i >= 0 && i < compactionIdx; i++) {
++				const entry = path[i];
++				if (entry.type !== "message" || entry.message.role !== "assistant") continue;
++				if (anthropicPayload.exactTail && historyRewriteAt !== undefined) {
++					historyRewriteAt = Math.min(historyRewriteAt, entry.message.timestamp - 1);
++				}
++				if (
++					observationTexts &&
++					!deferAnthropicObservation &&
++					entry.message.content.some(block => block.type === "thinking" && !!block.thinkingSignature)
++				) {
++					deferAnthropicObservation = true;
++				}
++			}
+ 		}
+ 
+ 		// Re-attach any archived snapcompact frames so the model can keep
+@@ -593,10 +667,29 @@ export function buildSessionContext(
+ 				historyRewriteAt,
+ 			},
+ 		);
++		let frozenMessages: AgentMessage[] | undefined;
++		if (!options?.transcript && !nativeCodexCompaction && observationTexts) {
++			frozenMessages = [];
++			const timestamp = new Date(compaction.timestamp).getTime();
++			for (const text of observationTexts) {
++				const observation: AgentMessage = {
++					role: "user",
++					content: [{ type: "text", text }],
++					attribution: "user",
++					timestamp,
++				};
++				frozenExtensionObservations.add(observation);
++				frozenMessages.push(observation);
++			}
++			frozenObservationCount = frozenMessages.length;
++		}
+ 		// Agent context (non-transcript): summary first so the LLM sees the
+ 		// compacted context before recent messages.
+ 		if (!options?.transcript) {
+ 			pushMessage(compactionSummaryMsg);
++			if (frozenMessages && !deferAnthropicObservation) {
++				for (const observation of frozenMessages) pushMessage(observation);
++			}
+ 		}
+ 
+ 		// Notes-backed windows do not summarize a discarded turn prefix. Recover
+@@ -630,14 +723,6 @@ export function buildSessionContext(
+ 		// turns visible instead of showing only the summary and post-compaction.
+ 		if (!remoteReplacementHistory || options?.transcript) {
+ 			// Emit kept messages (before compaction, starting from firstKeptEntryId).
+-			const firstKeptIdx = path.findIndex(
+-				(entry, index) => index < compactionIdx && entry.id === compaction.firstKeptEntryId,
+-			);
+-			const snapshotIdx =
+-				anthropicPayload && compaction.firstKeptEntryId === "" && compaction.providerReplayThroughEntryId
+-					? path.findIndex(entry => entry.id === compaction.providerReplayThroughEntryId)
+-					: -1;
+-			const retainedStart = firstKeptIdx >= 0 ? firstKeptIdx : snapshotIdx >= 0 ? snapshotIdx + 1 : -1;
+ 			if (retainedStart >= 0 && retainedStart < compactionIdx) {
+ 				let displayStartIdx = retainedStart;
+ 				if (options?.transcript) {
+@@ -675,6 +760,12 @@ export function buildSessionContext(
+ 				}
+ 			}
+ 		}
++		// The compaction entry's parent is the fixed end of this retained prefix.
++		// Later continuation entries follow the observation, including new tool turns.
++		if (deferAnthropicObservation && frozenMessages) {
++			for (const observation of frozenMessages) pushMessage(observation);
++			deferredObservationEndIndex = messages.length;
++		}
+ 
+ 		// Display transcript: emit the summary at the chronological compaction
+ 		// point (after kept messages, before post-compaction) so it stays in
+@@ -704,17 +795,17 @@ export function buildSessionContext(
+ 		if (notes && renderedNotes.length > 0) {
+ 			const sourceEntry = path.find(entry => entry.id === notes.entryId);
+ 			if (sourceEntry) {
+-				// A native Anthropic compaction block must open the request, and the
+-				// provider folds it into a directly following retained assistant turn
+-				// (whose signed thinking is bound to that prefix). Nothing may precede
+-				// the block or split that fold, so the notes follow the summary and any
+-				// retained assistant turn with its tool results.
++				// Native compaction must open the request. Branch-current notes follow
++				// the frozen observation; for an immediate Anthropic observation they
++				// also follow the first retained assistant/tool-result pair.
+ 				const head = messages[0];
+ 				let insertAt = 0;
+-				if (head?.role === "compactionSummary" && head.providerPayload?.type === "anthropicCompaction") {
+-					insertAt = 1;
+-					if (messages[insertAt]?.role === "assistant") insertAt++;
+-					while (messages[insertAt]?.role === "toolResult") insertAt++;
++				if (head?.role === "compactionSummary" && (head.providerPayload || frozenObservationCount > 0)) {
++					insertAt = deferredObservationEndIndex || 1 + frozenObservationCount;
++					if (head.providerPayload?.type === "anthropicCompaction" && deferredObservationEndIndex === 0) {
++						if (messages[insertAt]?.role === "assistant") insertAt++;
++						while (messages[insertAt]?.role === "toolResult") insertAt++;
++					}
+ 				}
+ 				messages.splice(
+ 					insertAt,
+diff --git a/packages/coding-agent/src/session/session-entries.ts b/packages/coding-agent/src/session/session-entries.ts
+index 6b96d2abb9..efff85a382 100644
+--- a/packages/coding-agent/src/session/session-entries.ts
++++ b/packages/coding-agent/src/session/session-entries.ts
+@@ -176,6 +176,8 @@ export interface CompactionEntry<T = unknown> extends SessionEntryBase {
+ 	details?: T;
+ 	/** Hook-provided data to persist across compaction */
+ 	preserveData?: Record<string, unknown>;
++	/** Extension-owned context frozen at the successful compaction commit, keyed by extension path. */
++	extensionSnapshots?: Record<string, string>;
+ 	/** True if generated by an extension, undefined/false if pi-generated (backward compatible) */
+ 	fromExtension?: boolean;
+ 	/**
+diff --git a/packages/coding-agent/src/session/session-handoff.ts b/packages/coding-agent/src/session/session-handoff.ts
+index 5eb2f13890..8c7436180f 100644
+--- a/packages/coding-agent/src/session/session-handoff.ts
++++ b/packages/coding-agent/src/session/session-handoff.ts
+@@ -16,6 +16,7 @@ import type { Settings } from "../config/settings";
+ import { obfuscateProviderContext } from "../secrets/message-transform";
+ import type { SecretObfuscator } from "../secrets/obfuscator";
+ import type { HandoffResult, SessionHandoffOptions } from "./agent-session-types";
++import { handoffHistoryWithoutFrozenExtensionSnapshots } from "./session-context";
+ import type { SessionManager } from "./session-manager";
+ 
+ import { cfgCompactionHandoffSaveToDisk } from "./context-settings";
+@@ -141,15 +142,13 @@ export class SessionHandoff {
+ 			// mirror exactly what the live turn populated the cache under.
+ 			const handoffPromptCacheKey = this.#host.getPromptCacheKeyForModel(model) ?? this.#host.agent.sessionId;
+ 			const handoffPromptText = renderHandoffPrompt(this.#host.obfuscateTextForProvider(customInstructions));
+-			const handoffSnapshot: AgentMessage[] = [
+-				...this.#host.agent.state.messages,
+-				{
+-					role: "user",
+-					content: [{ type: "text", text: handoffPromptText }],
+-					attribution: "agent",
+-					timestamp: Date.now(),
+-				},
+-			];
++			const handoffSnapshot = handoffHistoryWithoutFrozenExtensionSnapshots(this.#host.agent.state.messages);
++			handoffSnapshot.push({
++				role: "user",
++				content: [{ type: "text", text: handoffPromptText }],
++				attribution: "agent",
++				timestamp: Date.now(),
++			});
+ 			const handoffLlmMessages = await this.#host.convertMessagesToLlm(handoffSnapshot, handoffSignal, model);
+ 			// Base system prompt, not a per-turn `before_agent_start` hook override —
+ 			// the document seeds the post-compaction context and must not carry
+diff --git a/packages/coding-agent/src/session/session-maintenance.ts b/packages/coding-agent/src/session/session-maintenance.ts
+index 2ff97ded3c..d525c197c0 100644
+--- a/packages/coding-agent/src/session/session-maintenance.ts
++++ b/packages/coding-agent/src/session/session-maintenance.ts
+@@ -354,6 +354,8 @@ interface ArmedSpeculation {
+ 	codexCompaction?: CodexCompactionContext;
+ 	/** Last branch entry covered by the speculated summary's source snapshot. */
+ 	snapshotLeafId: string;
++	/** Session that produced the speculated source snapshot. */
++	sourceSessionId: string;
+ 	/** Context size when speculation started; drives refresh-on-growth. */
+ 	contextTokensAtStart: number;
+ }
+@@ -362,6 +364,7 @@ type CompactionProjectionArgs = {
+ 	summary: string;
+ 	shortSummary?: string;
+ 	tokensBefore: number;
++	extensionSnapshots?: Record<string, string>;
+ 	firstKeptEntryId: string;
+ 	preserveData?: Record<string, unknown>;
+ 	details?: unknown;
+@@ -649,6 +652,7 @@ export class SessionMaintenance {
+ 	/** Frame budget, blob resolution and reading model that rebuild a branch's context as the live session sends it. */
+ 	get #contextBuildOptions(): BuildSessionContextOptions {
+ 		return {
++			activeExtensionPaths: this.#host.extensionRunner?.getActiveExtensionPaths(),
+ 			maxFrameDataBytes: snapcompact.frameDataBytesBudget(this.#model),
+ 			resolveFrameData: data => this.#host.sessionManager.resolveFrameData(data),
+ 			model: this.#model,
+@@ -1420,6 +1424,8 @@ export class SessionMaintenance {
+ 				);
+ 			}
+ 			const pathEntries = this.#host.sessionManager.getBranch();
++			const sourceSessionId = this.#host.sessionId();
++			const sourceLeafId = pathEntries.at(-1)?.id;
+ 			const preparation = prepareCompaction(pathEntries, effectiveSettings, activeModel, this.#tokenizer);
+ 			if (!preparation) {
+ 				// Check why we can't compact
+@@ -1652,8 +1658,10 @@ export class SessionMaintenance {
+ 					cause: compactionAbortController.signal.reason,
+ 				});
+ 			}
++			if (!sourceLeafId || !this.#sourceBranchStillValid(sourceSessionId, sourceLeafId)) {
++				throw new CompactionCancelledError("Session branch changed during compaction");
++			}
+ 
+-			markCommitted();
+ 			await this.#commitCompactionEntry({
+ 				summary,
+ 				shortSummary,
+@@ -1666,6 +1674,7 @@ export class SessionMaintenance {
+ 				codexCompaction,
+ 				providerReplayThroughEntryId,
+ 				advisorResetReason: "compact",
++				onEntryAppended: markCommitted,
+ 			});
+ 
+ 			const compactionResult: CompactionResult = {
+@@ -1852,17 +1861,15 @@ export class SessionMaintenance {
+ 						details: { kind: "experimental-context-rollover", version: 1 },
+ 						preserveData: prepared.preserveData,
+ 					};
+-		// Report before `#commitCompactionEntry`, as the direct path does: it appends
+-		// the entry and then awaits post-append bookkeeping and the `session_compact`
+-		// hook, and a rejection there must still count as committed for the
+-		// interrupted-turn resume.
+-		onCommitted();
++		// The entry must land before the interrupted turn counts as committed;
++		// post-append bookkeeping and session_compact can still reject afterward.
+ 		await this.#commitCompactionEntry({
+ 			...result,
+ 			fromExtension,
+ 			method: undefined,
+ 			codexCompaction: undefined,
+ 			advisorResetReason: "experimental-context-rollover",
++			onEntryAppended: onCommitted,
+ 		});
+ 		this.#experimentalNotesReminderBoundaryId = undefined;
+ 		return {
+@@ -2249,6 +2256,8 @@ export class SessionMaintenance {
+ 		const model = this.#model;
+ 		if (!model) throw new Error("No model selected for handoff");
+ 		const entries = this.#host.sessionManager.getBranch();
++		const sourceSessionId = this.#host.sessionId();
++		const sourceLeafId = entries.at(-1)?.id;
+ 		const messageCount = entries.filter(e => e.type === "message").length;
+ 		if (messageCount < 2) throw new Error("Nothing to hand off (no messages yet)");
+ 		const compactionSettings = this.#compactionSettings;
+@@ -2264,6 +2273,7 @@ export class SessionMaintenance {
+ 		try {
+ 			const result = await this.#host.generateHandoffDocument(customInstructions, options);
+ 			if (!result) return undefined;
++			if (!sourceLeafId || !this.#sourceBranchStillValid(sourceSessionId, sourceLeafId)) return undefined;
+ 			const { summary, details } = handoffSummaryFromDocument(result.document, preparation);
+ 			await this.#commitCompactionEntry({
+ 				summary,
+@@ -2441,6 +2451,7 @@ export class SessionMaintenance {
+ 		const settings = this.#compactionSettings;
+ 		const effectiveSettings = resolveMethodSettings(settings, method);
+ 		const branch = this.#host.sessionManager.getBranch();
++		const sourceSessionId = this.#host.sessionId();
+ 		const snapshotLeafId = branch[branch.length - 1]?.id;
+ 		if (!snapshotLeafId) return clear();
+ 		const preparation = prepareCompaction(branch, effectiveSettings, model, this.#tokenizer);
+@@ -2465,6 +2476,7 @@ export class SessionMaintenance {
+ 				action: "handoff",
+ 				method,
+ 				snapshotLeafId,
++				sourceSessionId,
+ 				contextTokensAtStart: contextTokens,
+ 			};
+ 		} else {
+@@ -2511,6 +2523,7 @@ export class SessionMaintenance {
+ 				method,
+ 				codexCompaction,
+ 				snapshotLeafId,
++				sourceSessionId,
+ 				contextTokensAtStart: contextTokens,
+ 			};
+ 		}
+@@ -2529,14 +2542,15 @@ export class SessionMaintenance {
+ 	 * compaction or reset boundary, and any provider-native replay payload is
+ 	 * still readable by the active model.
+ 	 *
+-	 * When the branch has grown past the snapshot leaf, the speculation is only
+-	 * valid if applying it would still create sufficient headroom under the
+-	 * recovery band without net context expansion.
++	 * When the branch has grown past the snapshot leaf, or a captured extension
++	 * observation adds context, applying it must still create sufficient headroom
++	 * under the recovery band without net context expansion.
+ 	 */
+ 	#armedSpeculationValid(
+ 		armed: ArmedSpeculation,
+ 		triggerContextTokens?: number,
+ 		pendingContextTokens?: number,
++		extensionSnapshots?: Record<string, string>,
+ 	): boolean {
+ 		const model = this.#model;
+ 		if (!model) return false;
+@@ -2547,6 +2561,7 @@ export class SessionMaintenance {
+ 		) {
+ 			return false;
+ 		}
++		if (this.#host.sessionId() !== armed.sourceSessionId) return false;
+ 		const branch = this.#host.sessionManager.getBranch();
+ 		const leafIdx = branch.findIndex(entry => entry.id === armed.snapshotLeafId);
+ 		if (leafIdx < 0) return false;
+@@ -2555,12 +2570,13 @@ export class SessionMaintenance {
+ 			if (type === "compaction" || type === "reset_boundary") return false;
+ 		}
+ 		const nativeAnthropic = isRecord(armed.result.preserveData?.anthropicCompaction);
+-		if (leafIdx < branch.length - 1) {
++		if (leafIdx < branch.length - 1 || extensionSnapshots !== undefined) {
+ 			const keptIdx = branch.findIndex(entry => entry.id === armed.result.firstKeptEntryId);
+ 			if (keptIdx < 0 && !(nativeAnthropic && armed.result.firstKeptEntryId === "")) return false;
+ 		}
+ 		const projected = this.#projectCompactedContextTokens({
+ 			...armed.result,
++			extensionSnapshots,
+ 			method: armed.method,
+ 			providerReplayThroughEntryId:
+ 				armed.result.providerReplayThroughEntryId ??
+@@ -2590,7 +2606,7 @@ export class SessionMaintenance {
+ 		if (branchCurrentTokens - nonMessageTokens > emptyWrapperTokens && projected >= branchCurrentTokens) {
+ 			return false;
+ 		}
+-		if (leafIdx < branch.length - 1 && !nativeAnthropic) {
++		if ((leafIdx < branch.length - 1 && !nativeAnthropic) || extensionSnapshots !== undefined) {
+ 			const pendingTokens = Math.max(0, pendingContextTokens ?? 0);
+ 			const projectedWithPending = projected + pendingTokens;
+ 			const contextWindow = model.contextWindow ?? 0;
+@@ -2619,6 +2635,17 @@ export class SessionMaintenance {
+ 		}
+ 		return true;
+ 	}
++	/** Accept suffix growth, but never replay a generated result onto another branch cycle. */
++	#sourceBranchStillValid(sourceSessionId: string, sourceLeafId: string): boolean {
++		if (this.#host.sessionId() !== sourceSessionId) return false;
++		const branch = this.#host.sessionManager.getBranch();
++		const sourceIdx = branch.findIndex(entry => entry.id === sourceLeafId);
++		if (sourceIdx < 0) return false;
++		for (let i = sourceIdx + 1; i < branch.length; i++) {
++			if (branch[i].type === "compaction" || branch[i].type === "reset_boundary") return false;
++		}
++		return true;
++	}
+ 
+ 	/**
+ 	 * Consume the speculation slot for a real maintenance pass. An in-flight run
+@@ -2665,7 +2692,14 @@ export class SessionMaintenance {
+ 		providerReplayThroughEntryId?: string;
+ 		advisorResetReason: string;
+ 		detachExtensionEmit?: boolean;
++		onEntryAppended?: () => void;
++		extensionSnapshots?: Record<string, string>;
+ 	}): Promise<CompactionEntry | undefined> {
++		const extensionSnapshots =
++			args.method === "remote" || args.method === "handoff"
++				? args.extensionSnapshots ??
++					this.#host.extensionRunner?.captureCompactionSnapshots(this.#host.sessionManager.getBranch())
++				: undefined;
+ 		const entryId = this.#host.sessionManager.appendCompaction(
+ 			args.summary,
+ 			args.shortSummary,
+@@ -2676,13 +2710,15 @@ export class SessionMaintenance {
+ 				fromExtension: args.fromExtension,
+ 				preserveData: args.preserveData,
+ 				method: args.method,
++				extensionSnapshots,
+ 				providerReplayThroughEntryId: args.providerReplayThroughEntryId,
+ 				tokensAfter:
+ 					isRecord(args.details) && args.details.kind === "experimental-context-rollover"
+ 						? this.#projectExperimentalContextRolloverTokens(args)
+-						: this.#projectCompactedContextTokens(args),
++						: this.#projectCompactedContextTokens({ ...args, extensionSnapshots }),
+ 			},
+ 		);
++		args.onEntryAppended?.();
+ 		this.#host.persistEvalStateContext();
+ 		// A committed compaction starts a new cycle; native compaction gets a fresh try.
+ 		this.#failedNativeSpeculation = undefined;
+@@ -2738,6 +2774,7 @@ export class SessionMaintenance {
+ 		pendingMessages: AgentMessage[] = [],
+ 		tokenizer = this.#tokenizer,
+ 		messages: AgentMessage[] = this.#host.messages(),
++		model: Model | undefined = this.#model,
+ 	): number {
+ 		// Local counting is the whole point of this arm: provider usage is
+ 		// exactly what it must not trust. Exclude encrypted reasoning
+@@ -2751,10 +2788,32 @@ export class SessionMaintenance {
+ 		return (
+ 			computeNonMessageTokens(this.#host.nonMessageTokenSource(), tokenizer, this.#host.settings.revision) +
+ 			tokenizer.countMessages(messages, opts) +
++			this.#activeCodexObservationTokens(messages, tokenizer, model) +
+ 			tokenizer.countMessages(pendingMessages, opts)
+ 		);
+ 	}
+ 
++	/** Codex ciphertext is opaque; count only the frozen user observation plaintext. */
++	#activeCodexObservationTokens(messages: readonly AgentMessage[], tokenizer: Tokenizer, model: Model | undefined): number {
++		const head = messages[0];
++		if (
++			head?.role !== "compactionSummary" ||
++			head.providerPayload?.type !== "openaiResponsesHistory" ||
++			model?.provider !== head.providerPayload.provider ||
++			!tokenizer.nativeHistoryReplay ||
++			!head.providerPayload.items.some(item => item.type === "compaction" && typeof item.encrypted_content === "string")
++		) return 0;
++		const snapshots = getReadableCompactionEntry(this.#host.sessionManager.getBranchView(), model)?.extensionSnapshots;
++		const activePaths = this.#host.extensionRunner?.getActiveExtensionPaths();
++		if (!snapshots || !activePaths) return 0;
++		let tokens = 0;
++		for (const path of activePaths) {
++			const text = snapshots[path];
++			if (text) tokens += tokenizer.countTokens(text);
++		}
++		return tokens;
++	}
++
+ 	#estimatePrePromptContextTokens(messages: AgentMessage[], contextWindow: number): number {
+ 		const breakdown = this.#host.getContextBreakdown({ contextWindow, pendingMessages: messages });
+ 		const localEstimate = this.#estimateStoredContextTokens(messages);
+@@ -4210,6 +4269,7 @@ export class SessionMaintenance {
+ 			id: `${leaf.id}:compaction-tokens-projection`,
+ 			parentId: leaf.id,
+ 			timestamp: new Date().toISOString(),
++			extensionSnapshots: args.extensionSnapshots,
+ 			summary: args.summary,
+ 			shortSummary: args.shortSummary,
+ 			firstKeptEntryId: args.firstKeptEntryId,
+@@ -4483,7 +4543,8 @@ export class SessionMaintenance {
+ 				excludedIndex === -1 ? readerMessages : readerMessages.filter((_, index) => index !== excludedIndex);
+ 			const readerTokens =
+ 				computeNonMessageTokens(this.#host.nonMessageTokenSource(), tokenizer, this.#host.settings.revision) +
+-				tokenizer.countMessages(sentMessages, { excludeEncryptedReasoning: true });
++				tokenizer.countMessages(sentMessages, { excludeEncryptedReasoning: true }) +
++				this.#activeCodexObservationTokens(sentMessages, tokenizer, model);
+ 			return readerTokens <= fitBudget;
+ 		}
+ 		// Provider usage carries the reasoning the active model's request replayed,
+@@ -4509,6 +4570,7 @@ export class SessionMaintenance {
+ 					[],
+ 					tokenizer,
+ 					this.#messagesAsRead(messages, this.#host.sessionManager.getBranchView(), model),
++					model,
+ 				) - storedExcludedTokens,
+ 			),
+ 		);
+@@ -5349,6 +5411,25 @@ export class SessionMaintenance {
+ 			const startEvent = { type: "auto_compaction_start" as const, reason, action };
+ 			await this.#emitLifecycleEvent(startEvent, false);
+ 			if (armedSpec) {
++				const extensionSnapshots =
++					!autoCompactionSignal.aborted && (armedSpec.method === "remote" || armedSpec.method === "handoff")
++						? this.#host.extensionRunner?.captureCompactionSnapshots(this.#host.sessionManager.getBranch())
++						: undefined;
++				if (
++					!autoCompactionSignal.aborted &&
++					!this.#armedSpeculationValid(
++						armedSpec,
++						options.triggerContextTokens,
++						options.pendingContextTokens,
++						extensionSnapshots,
++					)
++				) {
++					await this.#emitLifecycleEvent(
++						{ type: "auto_compaction_end", action, result: undefined, aborted: false, willRetry: false, skipped: true },
++						options.detachPostCommit === true,
++					);
++					return await this.runAutoCompaction(reason, willRetry, { ...options, methodIndex });
++				}
+ 				// A background speculation already produced this compaction's
+ 				// summary; splice it in instead of paying for a blocking
+ 				// summarization. tokensBefore reflects the live trigger size when
+@@ -5389,8 +5470,11 @@ export class SessionMaintenance {
+ 					terminalTextAnswer,
+ 					suppressContinuation,
+ 					fallbackFromShake,
++					extensionSnapshots,
+ 					detachPostCommit: options.detachPostCommit === true,
+ 					autoCompactionSignal,
++					sourceSessionId: armedSpec.sourceSessionId,
++					sourceLeafId: armedSpec.snapshotLeafId,
+ 					onCommitted: () => {
+ 						compactionCommitted = true;
+ 					},
+@@ -5568,6 +5652,8 @@ export class SessionMaintenance {
+ 					return rescueRewroteHistory ? { ...base, historyRewritten: true } : base;
+ 				}
+ 			}
++			const sourceSessionId = this.#host.sessionId();
++			const sourceLeafId = pathEntriesForCompaction.at(-1)?.id;
+ 
+ 			let hookCompaction: CompactionResult | undefined;
+ 			let fromExtension = false;
+@@ -6194,6 +6280,8 @@ export class SessionMaintenance {
+ 				fallbackFromShake,
+ 				detachPostCommit: options.detachPostCommit === true,
+ 				autoCompactionSignal,
++				sourceSessionId,
++				sourceLeafId,
+ 				onCommitted: () => {
+ 					compactionCommitted = true;
+ 				},
+@@ -6285,12 +6373,19 @@ export class SessionMaintenance {
+ 		terminalTextAnswer: boolean;
+ 		suppressContinuation: boolean;
+ 		fallbackFromShake: boolean;
++		extensionSnapshots?: Record<string, string>;
+ 		detachPostCommit: boolean;
+ 		autoCompactionSignal: AbortSignal;
++		sourceSessionId: string;
++		sourceLeafId: string | undefined;
+ 		onCommitted: () => void;
+ 	}): Promise<CompactionCheckResult> {
+ 		const { action, reason, willRetry, detachPostCommit, autoCompactionSignal } = args;
+-		if (autoCompactionSignal.aborted) {
++		if (
++			autoCompactionSignal.aborted ||
++			!args.sourceLeafId ||
++			!this.#sourceBranchStillValid(args.sourceSessionId, args.sourceLeafId)
++		) {
+ 			await this.#emitLifecycleEvent(
+ 				{
+ 					type: "auto_compaction_end",
+@@ -6304,7 +6399,6 @@ export class SessionMaintenance {
+ 			return COMPACTION_CHECK_NONE;
+ 		}
+ 
+-		args.onCommitted();
+ 		const savedCompactionEntry = await this.#commitCompactionEntry({
+ 			summary: args.summary,
+ 			shortSummary: args.shortSummary,
+@@ -6316,8 +6410,10 @@ export class SessionMaintenance {
+ 			codexCompaction: args.codexCompaction,
+ 			method: args.method,
+ 			providerReplayThroughEntryId: args.providerReplayThroughEntryId,
++			extensionSnapshots: args.extensionSnapshots,
+ 			advisorResetReason: "auto-compaction",
+ 			detachExtensionEmit: detachPostCommit,
++			onEntryAppended: args.onCommitted,
+ 		});
+ 
+ 		const result: CompactionResult = {
+diff --git a/packages/coding-agent/src/session/session-manager.ts b/packages/coding-agent/src/session/session-manager.ts
+index 97c726b71c..9423c53273 100644
+--- a/packages/coding-agent/src/session/session-manager.ts
++++ b/packages/coding-agent/src/session/session-manager.ts
+@@ -3734,6 +3734,7 @@ export class SessionManager {
+ 			fromExtension?: boolean;
+ 			preserveData?: Record<string, unknown>;
+ 			method?: CompactionMethod;
++			extensionSnapshots?: Record<string, string>;
+ 			providerReplayThroughEntryId?: string;
+ 			tokensAfter?: number;
+ 		} = {},
+@@ -3749,6 +3750,7 @@ export class SessionManager {
+ 			method: options.method,
+ 			providerReplayThroughEntryId: options.providerReplayThroughEntryId,
+ 			details: options.details,
++			extensionSnapshots: options.extensionSnapshots,
+ 			fromExtension: options.fromExtension,
+ 			preserveData: options.preserveData,
+ 		};
+diff --git a/packages/coding-agent/src/session/session-provider-boundary.ts b/packages/coding-agent/src/session/session-provider-boundary.ts
+index ed90bee2d1..609a2fedca 100644
+--- a/packages/coding-agent/src/session/session-provider-boundary.ts
++++ b/packages/coding-agent/src/session/session-provider-boundary.ts
+@@ -48,6 +48,7 @@ export interface SessionProviderBoundaryHost {
+ 	/** The session tree's current cost gate. */
+ 	costGate?(): CostGateApi | undefined;
+ 	localProtocolOptions(): LocalProtocolOptions;
++	activeExtensionPaths(): ReadonlySet<string> | undefined;
+ 	transformContext(messages: AgentMessage[], signal?: AbortSignal): AgentMessage[] | Promise<AgentMessage[]>;
+ 	convertToLlm(messages: AgentMessage[]): Message[] | Promise<Message[]>;
+ 	onPayload: SimpleStreamOptions["onPayload"] | undefined;
+@@ -120,6 +121,7 @@ export class SessionProviderBoundary {
+ 	buildDisplaySessionContext(model = this.#host.model()): SessionContext {
+ 		return deobfuscateSessionContext(
+ 			this.#host.sessionManager.buildSessionContext({
++				activeExtensionPaths: this.#host.activeExtensionPaths(),
+ 				inFlightToolCallIds: this.#inFlightToolCallIds(),
+ 				maxFrameDataBytes: snapcompact.frameDataBytesBudget(model),
+ 				model,
+diff --git a/packages/coding-agent/test/agent-session-auto-compaction-progress-guard.test.ts b/packages/coding-agent/test/agent-session-auto-compaction-progress-guard.test.ts
+index 6c4b5568ce..702b63f616 100644
+--- a/packages/coding-agent/test/agent-session-auto-compaction-progress-guard.test.ts
++++ b/packages/coding-agent/test/agent-session-auto-compaction-progress-guard.test.ts
+@@ -113,6 +113,8 @@ describe("AgentSession auto-compaction progress guard", () => {
+ 				};
+ 			},
+ 			emitBeforeAgentStart: async () => undefined,
++			getActiveExtensionPaths: () => new Set<string>(),
++			captureCompactionSnapshots: () => undefined,
+ 		};
+ 
+ 		const bundled = getBundledModel("anthropic", "claude-sonnet-4-5");
+diff --git a/packages/coding-agent/test/agent-session-handoff.test.ts b/packages/coding-agent/test/agent-session-handoff.test.ts
+index 364faedd80..83aa4bef87 100644
+--- a/packages/coding-agent/test/agent-session-handoff.test.ts
++++ b/packages/coding-agent/test/agent-session-handoff.test.ts
+@@ -552,6 +552,8 @@ describe("AgentSession handoff", () => {
+ 					: undefined,
+ 			),
+ 			clearManagedTimers: vi.fn(),
++			getActiveExtensionPaths: () => new Set<string>(),
++			captureCompactionSnapshots: () => undefined,
+ 		} as unknown as ExtensionRunner;
+ 		vi.spyOn(compactionModule, "prepareCompaction").mockReturnValue(fixedPreparation);
+ 		vi.spyOn(compactionModule, "compact").mockResolvedValue({
+@@ -623,6 +625,8 @@ describe("AgentSession handoff", () => {
+ 					: undefined,
+ 			),
+ 			clearManagedTimers: vi.fn(),
++			getActiveExtensionPaths: () => new Set<string>(),
++			captureCompactionSnapshots: () => undefined,
+ 		} as unknown as ExtensionRunner;
+ 		vi.spyOn(compactionModule, "prepareCompaction").mockReturnValue(fixedPreparation);
+ 		const compactSpy = vi.spyOn(compactionModule, "compact").mockResolvedValue({

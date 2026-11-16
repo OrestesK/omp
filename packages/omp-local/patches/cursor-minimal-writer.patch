@@ -1,0 +1,62 @@
+diff --git a/packages/tui/src/tui.ts b/packages/tui/src/tui.ts
+index c987459258..6e551f4dfd 100644
+--- a/packages/tui/src/tui.ts
++++ b/packages/tui/src/tui.ts
+@@ -3943,16 +3943,33 @@ export class TUI extends Container {
+ 			}
+ 			buffer += `\x1b[${startTop + 1};1H`;
+ 			let screenRow = startTop;
++			const appendRow = (line: PreparedLine, rewritten: string, hasNextRow: boolean): void => {
++				if (hasNextRow && screenRow >= height - 1 && line.isImage && line.imageProtocol === ImageProtocol.Sixel) {
++					const source = line.line;
++					if (directPlacementLift(source) < height - 1) {
++						// Spend the following LF before saving the cursor so SIXEL cannot scroll twice.
++						if (source.startsWith("\x1b7") && source.endsWith("\x1b8")) {
++							rewritten = rewritten.replace("\x1b7", "\n\x1b[A\x1b7");
++						} else if (TERMINAL.hasImageMarkerAt(source, 0) && source.endsWith("\x1b\\")) {
++							rewritten = rewritten.replace(source, () => `\n\x1b[A\x1b7${source}\x1b8`);
++						}
++					}
++				}
++				append(rewritten);
++			};
+ 			for (let index = 0; index < preparedHistory.lines.length; index++) {
+ 				if (screenRow > startTop) buffer += "\n";
+-				append(
++				const line = preparedHistory.rows[index]!;
++				appendRow(
++					line,
+ 					this.#lineRewriteSequence(
+-						preparedHistory.rows[index]!,
++						line,
+ 						width,
+ 						Math.min(screenRow, height - 1),
+ 						this.#osc66SpacerGlyphWidth(preparedHistory.lines, index),
+ 						{ blankRow: compactReplay },
+ 					),
++					index + 1 < preparedHistory.lines.length || rows > 0,
+ 				);
+ 				screenRow++;
+ 			}
+@@ -3961,9 +3978,11 @@ export class TUI extends Container {
+ 				// Replay-split rows continue the history ledger written above them;
+ 				// the provider's own rows reach no higher than its viewport top.
+ 				const moved = index < replayViewportRows;
+-				append(
++				const line = prepared.rows[index]!;
++				appendRow(
++					line,
+ 					this.#lineRewriteSequence(
+-						prepared.rows[index]!,
++						line,
+ 						width,
+ 						moved ? Math.min(screenRow, height - 1) : index,
+ 						this.#osc66SpacerGlyphWidth(prepared.lines, index),
+@@ -3973,6 +3992,7 @@ export class TUI extends Container {
+ 							imageRow: newTop + index,
+ 						},
+ 					),
++					index + 1 < rows,
+ 				);
+ 				screenRow++;
+ 			}

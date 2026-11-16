@@ -1,0 +1,9 @@
+{
+  "patches": [
+    "patches/observational-memory.patch",
+    "patches/eval-worker-startup.patch",
+    "patches/minimal-base-prompt.patch",
+    "patches/mermaid-no-fit-source.patch",
+    "patches/compact-tool-output.patch"
+  ]
+}
