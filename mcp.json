@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
   "mcpServers": {
     "context7": {
+      "enabled": false,
       "type": "http",
       "url": "https://mcp.context7.com/mcp/oauth",
       "auth": {
@@ -33,15 +34,16 @@
       "type": "http",
       "instructions": false,
       "url": "https://mcp.descope.com",
+      "oauth": {
+        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzS2M4dENkY3dTVmtUR0RuQUtHckpOY2d1Q04j",
+        "redirectUri": "http://localhost:3000/callback"
+      },
       "auth": {
         "type": "oauth",
         "credentialId": "mcp_oauth:profile:default:https://mcp.descope.com",
         "tokenUrl": "https://api.descope.com/oauth2/v1/apps/agentic/P2DA3QqyF3N3BlmIqn1nr0LMFhrw/MS3AebdnI1nLELsiorZz77KmIleWt/token",
-        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzSnh3NEg1aGRxNnVhdWlvMkprbUZwS3VqMGoj",
+        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzS2M4dENkY3dTVmtUR0RuQUtHckpOY2d1Q04j",
         "resource": "https://mcp.descope.com"
-      },
-      "oauth": {
-        "clientId": "UDJEQTNRcXlGM04zQmxtSXFuMW5yMExNRmhydzpUUEEzSnh3NEg1aGRxNnVhdWlvMkprbUZwS3VqMGoj"
       }
     },
     "figma": {
@@ -88,9 +90,14 @@
       "args": [
         "dlx",
         "mcp-excalidraw-server@1.1.0"
-      ]
+      ],
+      "env": {
+        "EXPRESS_SERVER_URL": "http://127.0.0.1:23187",
+        "EXCALIDRAW_NO_AUTOSTART": "1"
+      }
     },
     "docent": {
+      "enabled": false,
       "type": "stdio",
       "command": "uv",
       "args": [
